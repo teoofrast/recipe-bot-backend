@@ -1,6 +1,7 @@
 from datetime import datetime
 from pathlib import Path
 
+from receipt.application.ports.transcriber import Transcript
 from receipt.application.ports.video_downloader import SubtitleTrack, VideoMetadata
 from receipt.domain.video import detect_platform
 
@@ -54,3 +55,19 @@ class FakeVideoDownloader:
         if self.subtitles_error is not None:
             raise self.subtitles_error
         return self.subtitles[track.language]
+
+
+class FakeTranscriber:
+    """Remembers what it was given; answers with ``text`` or raises ``error``."""
+
+    def __init__(self) -> None:
+        self.text = "Берём свёклу и капусту"
+        self.error: Exception | None = None
+        self.calls: list[tuple[Path, bool, str | None]] = []
+
+    async def transcribe(self, audio_path: Path, language: str | None = None) -> Transcript:
+        # Whether the file still exists at the moment of transcription.
+        self.calls.append((audio_path, audio_path.exists(), language))
+        if self.error is not None:
+            raise self.error
+        return Transcript(text=self.text, model="fake/whisper")

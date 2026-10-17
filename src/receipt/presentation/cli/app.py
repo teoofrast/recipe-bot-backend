@@ -8,6 +8,7 @@ from receipt.application.mediator import Mediator
 from receipt.application.system.ping import Ping, PingStream
 from receipt.application.video.get_video_info import GetVideoInfo
 from receipt.application.video.get_video_text import GetVideoText
+from receipt.application.video.get_video_transcript import GetVideoTranscript
 from receipt.domain.errors import DomainError
 
 
@@ -23,6 +24,9 @@ def build_parser() -> argparse.ArgumentParser:
         "video-text", help="show the video's text: title, description and subtitles"
     )
     video_text.add_argument("url")
+    transcribe = commands.add_parser("transcribe", help="download the audio and transcribe speech")
+    transcribe.add_argument("url")
+    transcribe.add_argument("--language", help="ISO-639-1 hint, e.g. ru; detected if omitted")
     return parser
 
 
@@ -55,6 +59,13 @@ async def run(args: argparse.Namespace, mediator: Mediator) -> None:
             print(f"Нужна транскрибация:   {'да' if result.text.needs_transcription else 'нет'}")
             print()
             print(result.text.combined())
+        case "transcribe":
+            transcript = await mediator.send(
+                GetVideoTranscript(url=args.url, language=args.language)
+            )
+            print(f"Модель: {transcript.model}")
+            print()
+            print(transcript.text or "(речи нет)")
 
 
 def main(argv: Sequence[str], mediator: Mediator) -> None:

@@ -62,7 +62,17 @@ docker compose run --rm api receipt ping
 docker compose run --rm api receipt ping-stream --count 3
 docker compose run --rm api receipt video-info "https://youtu.be/jNQXAC9IVRw"
 docker compose run --rm api receipt video-text "https://youtu.be/jNQXAC9IVRw"  # название, описание, субтитры
+docker compose run --rm api receipt transcribe "https://youtu.be/jNQXAC9IVRw"  # речь из аудио через OpenRouter
 ```
+
+## Распознавание речи
+
+Через OpenRouter (`/audio/transcriptions`). Нужен `OPENROUTER_API_KEY` в `.env` и **кредиты на балансе**:
+бесплатных моделей распознавания нет, но они дешёвые — `whisper-large-v3-turbo` около $0.0002 за минуту.
+
+Модели пробуются по очереди (`STT_MODELS`, через запятую): таймаут, лимит или ошибка провайдера —
+переход к следующей; неверный ключ или пустой баланс — сразу понятная ошибка. Перед отправкой
+ffmpeg оставляет от видео только речь: mono, 16 кГц, mp3 32 кбит/с (~240 КБ на минуту).
 
 ## Instagram и cookies
 
