@@ -1,6 +1,6 @@
 FROM ghcr.io/astral-sh/uv:0.12.19 AS uv
 
-FROM python:3.12.15-slim
+FROM python:3.14.8-slim
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ffmpeg \
