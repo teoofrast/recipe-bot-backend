@@ -24,3 +24,5 @@ data/
 .idea/
 .vscode/
 .DS_Store
+openapi.json
+junit.xml
