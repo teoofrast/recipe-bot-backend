@@ -61,6 +61,7 @@ uv run pytest -m integration
 docker compose run --rm api receipt ping
 docker compose run --rm api receipt ping-stream --count 3
 docker compose run --rm api receipt video-info "https://youtu.be/jNQXAC9IVRw"
+docker compose run --rm api receipt video-text "https://youtu.be/jNQXAC9IVRw"  # название, описание, субтитры
 ```
 
 ## Instagram и cookies
@@ -69,7 +70,8 @@ Instagram часто не отдаёт видео без входа в акка�
 
 1. Войдите в Instagram в браузере и выгрузите cookies в формате Netscape
    (например, расширением «Get cookies.txt LOCALLY») в `data/cookies/instagram.txt`.
-2. В `.env`: `YTDLP_COOKIES_FILE=/app/data/cookies/instagram.txt` (папка `data/` подключена в контейнер).
+2. В `.env`: `YTDLP_COOKIES_FILE=data/cookies/instagram.txt` — относительный путь работает и локально,
+   и в контейнере (рабочая папка там `/app`, а `data/` подключена в `/app/data`).
 
 Cookies — это доступ к аккаунту: `data/` и `cookies*.txt` в `.gitignore`, не коммитьте их.
 Лучше завести для бота отдельный аккаунт Instagram.
