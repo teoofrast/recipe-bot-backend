@@ -22,6 +22,9 @@ dependencies = [
     "yt-dlp>=2026.8.19",
 ]
 
+[project.scripts]
+receipt = "receipt.bootstrap.cli:main"
+
 [build-system]
 requires = ["uv_build>=0.12.19,<0.13.0"]
 build-backend = "uv_build"
@@ -45,3 +48,39 @@ select = ["E", "F", "W", "I", "B", "UP", "ASYNC", "RUF"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+
+[tool.importlinter]
+root_package = "receipt"
+include_external_packages = true
+
+[[tool.importlinter.contracts]]
+name = "Clean architecture layers"
+type = "layers"
+# Higher layers may import lower ones, never the other way round.
+# presentation and infrastructure are independent: they meet only in bootstrap.
+layers = [
+    "receipt.bootstrap",
+    "receipt.presentation | receipt.infrastructure",
+    "receipt.application",
+    "receipt.domain",
+]
+
+[[tool.importlinter.contracts]]
+name = "Domain and application stay framework-free"
+type = "forbidden"
+source_modules = ["receipt.domain", "receipt.application"]
+forbidden_modules = [
+    "fastapi",
+    "starlette",
+    "sse_starlette",
+    "pydantic",
+    "pydantic_settings",
+    "punq",
+    "langchain",
+    "langchain_core",
+    "langchain_openai",
+    "langgraph",
+    "yt_dlp",
+    "aiogram",
+    "httpx",
+]
