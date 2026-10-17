@@ -44,12 +44,35 @@ uv run lint-imports         # границы слоёв
 uv run pre-commit install   # ruff + import-linter перед каждым коммитом
 ```
 
+Обычный `pytest` (и CI) работает без сети. Интеграционные тесты ходят на настоящие платформы, их запускают отдельно:
+
+```bash
+uv run pytest -m integration
+# TikTok и Instagram — по своим ссылкам (YouTube проверяется всегда):
+TEST_TIKTOK_URL=https://www.tiktok.com/@.../video/... \
+TEST_INSTAGRAM_URL=https://www.instagram.com/reel/.../ \
+YTDLP_COOKIES_FILE=data/cookies/instagram.txt \
+uv run pytest -m integration
+```
+
 ## CLI
 
 ```bash
 docker compose run --rm api receipt ping
 docker compose run --rm api receipt ping-stream --count 3
+docker compose run --rm api receipt video-info "https://youtu.be/jNQXAC9IVRw"
 ```
+
+## Instagram и cookies
+
+Instagram часто не отдаёт видео без входа в аккаунт — тогда `video-info` скажет «нужны cookies».
+
+1. Войдите в Instagram в браузере и выгрузите cookies в формате Netscape
+   (например, расширением «Get cookies.txt LOCALLY») в `data/cookies/instagram.txt`.
+2. В `.env`: `YTDLP_COOKIES_FILE=/app/data/cookies/instagram.txt` (папка `data/` подключена в контейнер).
+
+Cookies — это доступ к аккаунту: `data/` и `cookies*.txt` в `.gitignore`, не коммитьте их.
+Лучше завести для бота отдельный аккаунт Instagram.
 
 ## Архитектура
 
