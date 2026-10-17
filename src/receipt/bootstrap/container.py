@@ -22,6 +22,7 @@ from receipt.application.video.get_video_transcript import (
 )
 from receipt.bootstrap.settings import Settings
 from receipt.infrastructure.clock import SystemClock
+from receipt.infrastructure.llm.provider import ChatModelProvider, Purpose
 from receipt.infrastructure.transcription.openrouter import OpenRouterTranscriber
 from receipt.infrastructure.video.yt_dlp_downloader import YtDlpVideoDownloader
 
@@ -48,12 +49,23 @@ def build_container(settings: Settings | None = None) -> punq.Container:
     container.register(
         SubtitleLanguages, instance=SubtitleLanguages(tuple(settings.subtitle_languages))
     )
-    api_key = settings.openrouter_api_key
+    api_key = (
+        settings.openrouter_api_key.get_secret_value() if settings.openrouter_api_key else None
+    )
     container.register(
         Transcriber,
-        instance=OpenRouterTranscriber(
-            api_key=api_key.get_secret_value() if api_key else None,
-            models=settings.stt_models,
+        instance=OpenRouterTranscriber(api_key=api_key, models=settings.stt_models),
+    )
+    # Used by the recipe extractor (card 5) and the assistant (card 9).
+    container.register(
+        ChatModelProvider,
+        instance=ChatModelProvider(
+            api_key=api_key,
+            models={
+                Purpose.EXTRACT: settings.llm_extract_models,
+                Purpose.CHAT: settings.llm_chat_models,
+            },
+            timeout_seconds=settings.llm_timeout_seconds,
         ),
     )
 
