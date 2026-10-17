@@ -19,7 +19,7 @@ dependencies = [
     "python-dotenv>=1.2.4",
     "sse-starlette>=3.5.0",
     "uvicorn[standard]>=0.54.0",
-    "yt-dlp>=2026.8.19",
+    "yt-dlp[curl-cffi,default,deno]>=2026.8.19",
 ]
 
 [project.scripts]
@@ -45,10 +45,15 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP", "ASYNC", "RUF"]
+# User-facing texts are in Russian: Cyrillic letters are intended, not look-alikes.
+ignore = ["RUF001", "RUF002", "RUF003"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+# Integration tests hit real platforms: run them explicitly with `pytest -m integration`.
+addopts = ["-m", "not integration"]
+markers = ["integration: talks to real external services (network)"]
 
 [tool.importlinter]
 root_package = "receipt"
