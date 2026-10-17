@@ -1,7 +1,7 @@
 from pathlib import Path
 from typing import Annotated
 
-from pydantic import SecretStr, field_validator
+from pydantic import SecretStr, ValidationInfo, field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 # Lists are written in the environment as comma-separated values: STT_MODELS=a,b,c
@@ -26,11 +26,33 @@ class Settings(BaseSettings):
     # nothing for music without speech, where Whisper makes up "subtitles by ..." lines.
     stt_models: CommaList = ["openai/gpt-4o-mini-transcribe", "openai/whisper-large-v3-turbo"]
 
-    @field_validator("subtitle_languages", "stt_models", mode="before")
+    # Free chat models on OpenRouter, tried in order. Picked by a real probe (Russian recipe
+    # text): extraction needs JSON by schema, chat needs tool calling. Free models come and
+    # go and hit shared rate limits often, hence several of each.
+    llm_extract_models: CommaList = [
+        "nvidia/nemotron-3-super-120b-a12b:free",
+        "nvidia/nemotron-3.5-super-vl:free",
+        "dots-studio/dots-3-note-preview:free",
+    ]
+    llm_chat_models: CommaList = [
+        "nvidia/nemotron-3-super-120b-a12b:free",
+        "poolside/laguna-s-2.1:free",
+        "google/gemma-4-31b-it:free",
+    ]
+    # Hard limit per model call; then the next model is tried.
+    llm_timeout_seconds: float = 40
+
+    @field_validator(
+        "subtitle_languages", "stt_models", "llm_extract_models", "llm_chat_models", mode="before"
+    )
     @classmethod
-    def _split_commas(cls, value: object) -> object:
+    def _split_commas(cls, value: object, info: ValidationInfo) -> object:
         if isinstance(value, str):
-            return [item.strip() for item in value.split(",") if item.strip()]
+            items = [item.strip() for item in value.split(",") if item.strip()]
+            # An empty variable (e.g. "LLM_CHAT_MODELS=" copied from .env.example) means
+            # "not set", not "no models at all".
+            assert info.field_name is not None
+            return items or cls.model_fields[info.field_name].get_default(call_default_factory=True)
         return value
 
     @field_validator("openrouter_api_key", mode="before")

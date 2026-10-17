@@ -26,6 +26,10 @@ _REASON_TEXT = {
 }
 
 
+class LlmUnavailableError(ApplicationError):
+    """No language model answered: wrong key, every model failed or hit its limit."""
+
+
 class TranscriptionError(ApplicationError):
     """Speech could not be turned into text: no API key, no credits, every model failed."""
 

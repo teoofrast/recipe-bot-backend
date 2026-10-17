@@ -55,6 +55,10 @@ ignore = ["RUF001", "RUF002", "RUF003"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+# One event loop for the whole run, like the app has: langchain-openai caches its HTTP client
+# across calls, and a client bound to a closed loop fails with "Event loop is closed".
+asyncio_default_test_loop_scope = "session"
+asyncio_default_fixture_loop_scope = "session"
 # Integration tests hit real platforms: run them explicitly with `pytest -m integration`.
 addopts = ["-m", "not integration"]
 markers = ["integration: talks to real external services (network)"]
