@@ -5,10 +5,11 @@ import pytest
 
 from receipt.application.mediator import Mediator
 from receipt.application.ports.clock import Clock
+from receipt.application.ports.transcriber import Transcriber
 from receipt.application.ports.video_downloader import SubtitleFetcher, VideoDownloader
 from receipt.bootstrap.container import build_container
 from receipt.bootstrap.settings import Settings
-from tests.fakes import FakeClock, FakeVideoDownloader
+from tests.fakes import FakeClock, FakeTranscriber, FakeVideoDownloader
 
 FIXED_NOW = datetime(2026, 1, 1, 12, 0, tzinfo=UTC)
 
@@ -19,12 +20,20 @@ def video_downloader() -> FakeVideoDownloader:
 
 
 @pytest.fixture
-def container(video_downloader: FakeVideoDownloader) -> punq.Container:
+def transcriber() -> FakeTranscriber:
+    return FakeTranscriber()
+
+
+@pytest.fixture
+def container(
+    video_downloader: FakeVideoDownloader, transcriber: FakeTranscriber
+) -> punq.Container:
     """Production wiring with external adapters replaced by fakes."""
     container = build_container(Settings(_env_file=None))
     container.register(Clock, instance=FakeClock(FIXED_NOW))
     container.register(VideoDownloader, instance=video_downloader)
     container.register(SubtitleFetcher, instance=video_downloader)
+    container.register(Transcriber, instance=transcriber)
     return container
 
 

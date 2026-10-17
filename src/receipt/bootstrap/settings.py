@@ -1,6 +1,11 @@
 from pathlib import Path
+from typing import Annotated
 
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import SecretStr, field_validator
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
+
+# Lists are written in the environment as comma-separated values: STT_MODELS=a,b,c
+type CommaList = Annotated[list[str], NoDecode]
 
 
 class Settings(BaseSettings):
@@ -14,5 +19,21 @@ class Settings(BaseSettings):
     ytdlp_cookies_file: Path | None = None
 
     # Subtitle languages to try after the video's own language, in order.
-    # In the environment, as JSON: SUBTITLE_LANGUAGES=["ru","en"]
-    subtitle_languages: list[str] = ["ru", "en"]
+    subtitle_languages: CommaList = ["ru", "en"]
+
+    openrouter_api_key: SecretStr | None = None
+    # Speech-to-text models on OpenRouter, tried in order. gpt-4o-mini-transcribe returns
+    # nothing for music without speech, where Whisper makes up "subtitles by ..." lines.
+    stt_models: CommaList = ["openai/gpt-4o-mini-transcribe", "openai/whisper-large-v3-turbo"]
+
+    @field_validator("subtitle_languages", "stt_models", mode="before")
+    @classmethod
+    def _split_commas(cls, value: object) -> object:
+        if isinstance(value, str):
+            return [item.strip() for item in value.split(",") if item.strip()]
+        return value
+
+    @field_validator("openrouter_api_key", mode="before")
+    @classmethod
+    def _empty_key_is_none(cls, value: object) -> object:
+        return value or None

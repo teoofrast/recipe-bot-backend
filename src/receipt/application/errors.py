@@ -26,6 +26,10 @@ _REASON_TEXT = {
 }
 
 
+class TranscriptionError(ApplicationError):
+    """Speech could not be turned into text: no API key, no credits, every model failed."""
+
+
 class SubtitlesUnavailableError(ApplicationError):
     """A subtitle track is listed but could not be downloaded."""
 

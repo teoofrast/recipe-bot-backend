@@ -62,7 +62,28 @@ docker compose run --rm api receipt ping
 docker compose run --rm api receipt ping-stream --count 3
 docker compose run --rm api receipt video-info "https://youtu.be/jNQXAC9IVRw"
 docker compose run --rm api receipt video-text "https://youtu.be/jNQXAC9IVRw"  # название, описание, субтитры
+docker compose run --rm api receipt transcribe "https://youtu.be/jNQXAC9IVRw"  # речь из аудио через OpenRouter
 ```
+
+## Распознавание речи
+
+Через OpenRouter (`/audio/transcriptions`). Нужен `OPENROUTER_API_KEY` в `.env` и **кредиты на балансе**:
+бесплатных моделей распознавания нет.
+
+Сравнение на реальных роликах (3 минуты русской речи; Reels с музыкой без речи):
+
+| Модель | $ / мин | 3 мин речи | Речь | Музыка без речи |
+|---|---|---|---|---|
+| `openai/gpt-4o-mini-transcribe` (основная) | 0.0018 | 4.8 с | отлично | пусто ✅ |
+| `openai/whisper-large-v3-turbo` (запасная) | 0.0002 | 4.4 с | хорошо, опечатки | «Субтитры сделал DimaTorzok» |
+| `openai/whisper-large-v3` | 0.0015 | 14.3 с | хорошо | галлюцинации |
+| `openai/gpt-4o-transcribe` | 0.0034 | 8.6 с | отлично | фраза на венгерском |
+
+Известные галлюцинации Whisper («Субтитры сделал…», «Продолжение следует…») вычищаются из текста.
+
+Модели пробуются по очереди (`STT_MODELS`, через запятую): таймаут, лимит или ошибка провайдера —
+переход к следующей; неверный ключ или пустой баланс — сразу понятная ошибка. Перед отправкой
+ffmpeg оставляет от видео только речь: mono, 16 кГц, mp3 32 кбит/с (~240 КБ на минуту).
 
 ## Instagram и cookies
 
