@@ -13,6 +13,7 @@ from receipt.application.errors import (
 from receipt.application.ports.video_downloader import SubtitleTrack
 from receipt.domain.video import Platform, UnsupportedUrlError
 from receipt.infrastructure.video.yt_dlp_downloader import (
+    AUDIO_FORMAT,
     YtDlpVideoDownloader,
     classify_download_error,
 )
@@ -195,7 +196,7 @@ async def test_download_audio_returns_downloaded_file(
 
     assert path == target / "abc.webm"
     assert target.is_dir()
-    assert fake_ytdl.calls[0]["format"] == "bestaudio/best"
+    assert fake_ytdl.calls[0]["format"] == AUDIO_FORMAT
     assert fake_ytdl.calls[0]["outtmpl"] == str(target / "%(id)s.%(ext)s")
 
 

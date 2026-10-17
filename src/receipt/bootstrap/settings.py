@@ -22,8 +22,9 @@ class Settings(BaseSettings):
     subtitle_languages: CommaList = ["ru", "en"]
 
     openrouter_api_key: SecretStr | None = None
-    # Speech-to-text models on OpenRouter, tried in order.
-    stt_models: CommaList = ["openai/whisper-large-v3-turbo", "openai/whisper-large-v3"]
+    # Speech-to-text models on OpenRouter, tried in order. gpt-4o-mini-transcribe returns
+    # nothing for music without speech, where Whisper makes up "subtitles by ..." lines.
+    stt_models: CommaList = ["openai/gpt-4o-mini-transcribe", "openai/whisper-large-v3-turbo"]
 
     @field_validator("subtitle_languages", "stt_models", mode="before")
     @classmethod

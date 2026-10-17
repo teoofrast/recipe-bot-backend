@@ -33,6 +33,11 @@ class _YtDlpLogger:
         _log.debug(message)
 
 
+# Instagram's audio-only track is xHE-AAC (mp4a.40.42), which ffmpeg cannot decode yet, so
+# such tracks are skipped for a small video file with ordinary AAC ("?" also lets through
+# formats whose codec is unknown). TikTok and Instagram may have no audio-only track at all.
+AUDIO_FORMAT = "bestaudio[acodec!=?mp4a.40.42]/worst[acodec!=?mp4a.40.42]/best"
+
 _BASE_OPTIONS: dict[str, Any] = {
     "quiet": True,
     "no_warnings": True,
@@ -84,8 +89,7 @@ class YtDlpVideoDownloader:
         detect_platform(url)
         await asyncio.to_thread(target_dir.mkdir, parents=True, exist_ok=True)
         options = {
-            # TikTok and Instagram often have no separate audio track: then take the whole file.
-            "format": "bestaudio/best",
+            "format": AUDIO_FORMAT,
             "outtmpl": str(target_dir / "%(id)s.%(ext)s"),
         }
         info = await asyncio.to_thread(self._extract, url, options, True)

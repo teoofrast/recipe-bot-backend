@@ -10,6 +10,7 @@ import httpx
 from receipt.application.errors import TranscriptionError
 from receipt.application.ports.transcriber import Transcript
 from receipt.infrastructure.audio.ffmpeg import compress_for_speech
+from receipt.infrastructure.transcription.hallucinations import remove_hallucinations
 
 logger = logging.getLogger(__name__)
 
@@ -103,4 +104,4 @@ class OpenRouterTranscriber:
             return f"неожиданный ответ: {response.text[:200]}"
         logger.info("Transcribed with %s", model)
         # Empty text is a valid answer: a video with music and no speech.
-        return Transcript(text=(text or "").strip(), model=model)
+        return Transcript(text=remove_hallucinations(text or ""), model=model)
