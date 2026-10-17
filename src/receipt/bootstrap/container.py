@@ -7,9 +7,14 @@ import punq
 from receipt.application.behaviors import ErrorBehavior, LoggingBehavior
 from receipt.application.mediator import Mediator
 from receipt.application.ports.clock import Clock
-from receipt.application.ports.video_downloader import VideoDownloader
+from receipt.application.ports.video_downloader import SubtitleFetcher, VideoDownloader
 from receipt.application.system.ping import Ping, PingHandler, PingStream, PingStreamHandler
 from receipt.application.video.get_video_info import GetVideoInfo, GetVideoInfoHandler
+from receipt.application.video.get_video_text import (
+    GetVideoText,
+    GetVideoTextHandler,
+    SubtitleLanguages,
+)
 from receipt.bootstrap.settings import Settings
 from receipt.infrastructure.clock import SystemClock
 from receipt.infrastructure.video.yt_dlp_downloader import YtDlpVideoDownloader
@@ -18,6 +23,7 @@ HANDLERS: dict[type[Any], type[Any]] = {
     Ping: PingHandler,
     PingStream: PingStreamHandler,
     GetVideoInfo: GetVideoInfoHandler,
+    GetVideoText: GetVideoTextHandler,
 }
 
 
@@ -29,9 +35,11 @@ def build_container(settings: Settings | None = None) -> punq.Container:
 
     # Ports -> adapters. Clients holding connections (LLM, Chroma) will be singletons too.
     container.register(Clock, SystemClock, scope=punq.Scope.singleton)
+    yt_dlp_adapter = YtDlpVideoDownloader(cookies_file=settings.ytdlp_cookies_file)
+    container.register(VideoDownloader, instance=yt_dlp_adapter)
+    container.register(SubtitleFetcher, instance=yt_dlp_adapter)
     container.register(
-        VideoDownloader,
-        instance=YtDlpVideoDownloader(cookies_file=settings.ytdlp_cookies_file),
+        SubtitleLanguages, instance=SubtitleLanguages(tuple(settings.subtitle_languages))
     )
 
     # Handlers are transient: a fresh instance per request.

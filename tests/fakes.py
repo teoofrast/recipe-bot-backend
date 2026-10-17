@@ -1,7 +1,7 @@
 from datetime import datetime
 from pathlib import Path
 
-from receipt.application.ports.video_downloader import VideoMetadata
+from receipt.application.ports.video_downloader import SubtitleTrack, VideoMetadata
 from receipt.domain.video import detect_platform
 
 
@@ -14,10 +14,18 @@ class FakeClock:
 
 
 class FakeVideoDownloader:
-    """Answers every link with the same video; raises ``error`` instead, if set."""
+    """Answers every link with the same video; raises ``error`` instead, if set.
+
+    Also plays SubtitleFetcher: ``subtitles`` maps a track language to its text, and
+    ``subtitles_error`` is raised for every track if set.
+    """
 
     def __init__(self, error: Exception | None = None) -> None:
         self.error = error
+        self.description = "Свёкла 2 шт, капуста 300 г"
+        self.subtitle_tracks: tuple[SubtitleTrack, ...] = ()
+        self.subtitles: dict[str, str] = {}
+        self.subtitles_error: Exception | None = None
 
     async def fetch_metadata(self, url: str) -> VideoMetadata:
         platform = detect_platform(url)
@@ -28,9 +36,11 @@ class FakeVideoDownloader:
             platform=platform,
             video_id="abc123",
             title="Борщ за 30 минут",
-            description="Свёкла 2 шт, капуста 300 г",
+            description=self.description,
             author="chef",
             duration_seconds=59,
+            language="ru",
+            subtitle_tracks=self.subtitle_tracks,
         )
 
     async def download_audio(self, url: str, target_dir: Path) -> Path:
@@ -39,3 +49,8 @@ class FakeVideoDownloader:
         path = target_dir / "abc123.m4a"
         path.write_bytes(b"fake audio")
         return path
+
+    async def fetch_subtitle_text(self, track: SubtitleTrack) -> str:
+        if self.subtitles_error is not None:
+            raise self.subtitles_error
+        return self.subtitles[track.language]

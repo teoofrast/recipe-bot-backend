@@ -5,9 +5,14 @@ from typing import Any
 
 import yt_dlp
 
-from receipt.application.errors import VideoUnavailableError, VideoUnavailableReason
-from receipt.application.ports.video_downloader import VideoMetadata
+from receipt.application.errors import (
+    SubtitlesUnavailableError,
+    VideoUnavailableError,
+    VideoUnavailableReason,
+)
+from receipt.application.ports.video_downloader import SubtitleTrack, VideoMetadata
 from receipt.domain.video import Platform, UnsupportedUrlError, detect_platform
+from receipt.infrastructure.video.subtitles import subtitles_to_text
 
 _log = logging.getLogger("yt_dlp")
 
@@ -58,9 +63,16 @@ def classify_download_error(message: str) -> VideoUnavailableReason:
 
 
 class YtDlpVideoDownloader:
-    """yt-dlp is blocking, so every call runs in a worker thread."""
+    """Implements both VideoDownloader and SubtitleFetcher.
+
+    yt-dlp is blocking, so every call runs in a worker thread.
+    """
 
     def __init__(self, cookies_file: Path | None = None) -> None:
+        if cookies_file is not None and not cookies_file.is_file():
+            # A wrong path must not break YouTube and TikTok, which work without cookies.
+            _log.warning("Cookies file %s not found, continuing without cookies", cookies_file)
+            cookies_file = None
         self._cookies_file = cookies_file
 
     async def fetch_metadata(self, url: str) -> VideoMetadata:
@@ -79,12 +91,27 @@ class YtDlpVideoDownloader:
         info = await asyncio.to_thread(self._extract, url, options, True)
         return Path(info["requested_downloads"][0]["filepath"])
 
-    def _extract(self, url: str, options: dict[str, Any], download: bool) -> dict[str, Any]:
-        all_options = {**_BASE_OPTIONS, **options}
+    async def fetch_subtitle_text(self, track: SubtitleTrack) -> str:
+        raw = await asyncio.to_thread(self._download_text, track.url)
+        return subtitles_to_text(raw)
+
+    def _options(self, extra: dict[str, Any]) -> dict[str, Any]:
+        options = {**_BASE_OPTIONS, **extra}
         if self._cookies_file is not None:
-            all_options["cookiefile"] = str(self._cookies_file)
+            options["cookiefile"] = str(self._cookies_file)
+        return options
+
+    def _download_text(self, url: str) -> str:
+        # Through yt-dlp, not a bare HTTP client: same cookies, headers and impersonation.
         try:
-            with yt_dlp.YoutubeDL(all_options) as ydl:
+            with yt_dlp.YoutubeDL(self._options({})) as ydl:
+                return ydl.urlopen(url).read().decode("utf-8", errors="replace")
+        except (yt_dlp.networking.exceptions.RequestError, OSError) as error:
+            raise SubtitlesUnavailableError(str(error)) from error
+
+    def _extract(self, url: str, options: dict[str, Any], download: bool) -> dict[str, Any]:
+        try:
+            with yt_dlp.YoutubeDL(self._options(options)) as ydl:
                 info = ydl.extract_info(url, download=download)
         except yt_dlp.utils.DownloadError as error:
             message = str(error)
@@ -106,4 +133,35 @@ def _to_metadata(info: dict[str, Any], url: str, platform: Platform) -> VideoMet
         description=info.get("description") or "",
         author=info.get("uploader") or info.get("channel") or info.get("creator"),
         duration_seconds=round(duration) if duration is not None else None,
+        language=info.get("language"),
+        subtitle_tracks=_subtitle_tracks(info),
     )
+
+
+_TEXT_FORMATS = ("vtt", "srt")
+
+
+def _text_format(formats: list[dict[str, Any]]) -> dict[str, Any] | None:
+    by_ext = {item.get("ext"): item for item in formats if item.get("url")}
+    return next((by_ext[ext] for ext in _TEXT_FORMATS if ext in by_ext), None)
+
+
+def _subtitle_tracks(info: dict[str, Any]) -> tuple[SubtitleTrack, ...]:
+    tracks: list[SubtitleTrack] = []
+    for language, formats in (info.get("subtitles") or {}).items():
+        if language == "live_chat":
+            continue
+        if chosen := _text_format(formats):
+            tracks.append(SubtitleTrack(language, chosen["url"], chosen["ext"], automatic=False))
+
+    # YouTube lists ~160 automatic tracks: the recognized speech ("en-orig") plus machine
+    # translations of it. Only the original is worth reading.
+    automatic = info.get("automatic_captions") or {}
+    originals = [key for key in automatic if key.endswith("-orig")]
+    if not originals and info.get("language") in automatic:
+        originals = [info["language"]]
+    for key in originals:
+        if chosen := _text_format(automatic[key]):
+            language = key.removesuffix("-orig")
+            tracks.append(SubtitleTrack(language, chosen["url"], chosen["ext"], automatic=True))
+    return tuple(tracks)

@@ -5,7 +5,7 @@ import pytest
 
 from receipt.application.mediator import Mediator
 from receipt.application.ports.clock import Clock
-from receipt.application.ports.video_downloader import VideoDownloader
+from receipt.application.ports.video_downloader import SubtitleFetcher, VideoDownloader
 from receipt.bootstrap.container import build_container
 from receipt.bootstrap.settings import Settings
 from tests.fakes import FakeClock, FakeVideoDownloader
@@ -24,6 +24,7 @@ def container(video_downloader: FakeVideoDownloader) -> punq.Container:
     container = build_container(Settings(_env_file=None))
     container.register(Clock, instance=FakeClock(FIXED_NOW))
     container.register(VideoDownloader, instance=video_downloader)
+    container.register(SubtitleFetcher, instance=video_downloader)
     return container
 
 

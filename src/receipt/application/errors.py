@@ -26,6 +26,10 @@ _REASON_TEXT = {
 }
 
 
+class SubtitlesUnavailableError(ApplicationError):
+    """A subtitle track is listed but could not be downloaded."""
+
+
 class VideoUnavailableError(ApplicationError):
     """The platform would not give the video. ``detail`` keeps the platform's own message."""
 

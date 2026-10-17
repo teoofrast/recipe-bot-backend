@@ -1,10 +1,16 @@
+import io
 from pathlib import Path
 from typing import Any
 
 import pytest
 import yt_dlp
 
-from receipt.application.errors import VideoUnavailableError, VideoUnavailableReason
+from receipt.application.errors import (
+    SubtitlesUnavailableError,
+    VideoUnavailableError,
+    VideoUnavailableReason,
+)
+from receipt.application.ports.video_downloader import SubtitleTrack
 from receipt.domain.video import Platform, UnsupportedUrlError
 from receipt.infrastructure.video.yt_dlp_downloader import (
     YtDlpVideoDownloader,
@@ -28,6 +34,7 @@ class FakeYoutubeDL:
 
     calls: list[dict[str, Any]]
     result: dict[str, Any] | Exception
+    body: bytes = b""
 
     def __init__(self, options: dict[str, Any]) -> None:
         FakeYoutubeDL.calls.append(options)
@@ -42,6 +49,11 @@ class FakeYoutubeDL:
         if isinstance(FakeYoutubeDL.result, Exception):
             raise FakeYoutubeDL.result
         return FakeYoutubeDL.result
+
+    def urlopen(self, url: str) -> io.BytesIO:
+        if isinstance(FakeYoutubeDL.result, Exception):
+            raise FakeYoutubeDL.result
+        return io.BytesIO(FakeYoutubeDL.body)
 
 
 @pytest.fixture
@@ -78,12 +90,99 @@ async def test_fetch_metadata_tolerates_missing_fields(fake_ytdl: type[FakeYoutu
     assert metadata.url == YOUTUBE_URL
 
 
-async def test_cookies_file_is_passed_to_yt_dlp(fake_ytdl: type[FakeYoutubeDL]) -> None:
-    await YtDlpVideoDownloader(cookies_file=Path("/cookies/instagram.txt")).fetch_metadata(
-        YOUTUBE_URL
+async def test_cookies_file_is_passed_to_yt_dlp(
+    fake_ytdl: type[FakeYoutubeDL], tmp_path: Path
+) -> None:
+    cookies = tmp_path / "instagram.txt"
+    cookies.write_text("# Netscape HTTP Cookie File\n")
+
+    await YtDlpVideoDownloader(cookies_file=cookies).fetch_metadata(YOUTUBE_URL)
+
+    assert fake_ytdl.calls[0]["cookiefile"] == str(cookies)
+
+
+async def test_missing_cookies_file_is_ignored(
+    fake_ytdl: type[FakeYoutubeDL], tmp_path: Path
+) -> None:
+    await YtDlpVideoDownloader(cookies_file=tmp_path / "missing.txt").fetch_metadata(YOUTUBE_URL)
+
+    assert "cookiefile" not in fake_ytdl.calls[0]
+
+
+def subtitle_formats(language: str) -> list[dict[str, str]]:
+    return [
+        {"ext": "json3", "url": f"https://subs/{language}.json3"},
+        {"ext": "vtt", "url": f"https://subs/{language}.vtt"},
+    ]
+
+
+async def test_metadata_lists_manual_and_original_automatic_subtitles(
+    fake_ytdl: type[FakeYoutubeDL],
+) -> None:
+    fake_ytdl.result = {
+        **INFO,
+        "language": "en",
+        "subtitles": {"de-DE": subtitle_formats("de-DE"), "live_chat": subtitle_formats("chat")},
+        "automatic_captions": {
+            "en-orig": subtitle_formats("en-orig"),
+            "en": subtitle_formats("en"),
+            "ru": subtitle_formats("ru"),  # machine translation of en-orig
+        },
+    }
+
+    metadata = await YtDlpVideoDownloader().fetch_metadata(YOUTUBE_URL)
+
+    assert metadata.language == "en"
+    assert metadata.subtitle_tracks == (
+        SubtitleTrack("de-DE", "https://subs/de-DE.vtt", "vtt", automatic=False),
+        SubtitleTrack("en", "https://subs/en-orig.vtt", "vtt", automatic=True),
     )
 
-    assert fake_ytdl.calls[0]["cookiefile"] == "/cookies/instagram.txt"
+
+async def test_without_orig_marker_automatic_track_in_video_language_is_used(
+    fake_ytdl: type[FakeYoutubeDL],
+) -> None:
+    fake_ytdl.result = {
+        **INFO,
+        "language": "ru",
+        "automatic_captions": {"ru": subtitle_formats("ru"), "en": subtitle_formats("en")},
+    }
+
+    metadata = await YtDlpVideoDownloader().fetch_metadata(YOUTUBE_URL)
+
+    assert metadata.subtitle_tracks == (
+        SubtitleTrack("ru", "https://subs/ru.vtt", "vtt", automatic=True),
+    )
+
+
+async def test_srt_is_used_when_there_is_no_vtt(fake_ytdl: type[FakeYoutubeDL]) -> None:
+    fake_ytdl.result = {
+        **INFO,
+        "subtitles": {"eng-US": [{"ext": "srt", "url": "https://subs/eng.srt"}]},
+    }
+
+    metadata = await YtDlpVideoDownloader().fetch_metadata(YOUTUBE_URL)
+
+    assert metadata.subtitle_tracks == (
+        SubtitleTrack("eng-US", "https://subs/eng.srt", "srt", automatic=False),
+    )
+
+
+async def test_fetch_subtitle_text_downloads_and_cleans(fake_ytdl: type[FakeYoutubeDL]) -> None:
+    fake_ytdl.body = "WEBVTT\n\n00:00:01.000 --> 00:00:02.000\n<c>Берём</c> свёклу\n".encode()
+    track = SubtitleTrack("ru", "https://subs/ru.vtt", "vtt", automatic=True)
+
+    assert await YtDlpVideoDownloader().fetch_subtitle_text(track) == "Берём свёклу"
+
+
+async def test_fetch_subtitle_text_network_error(fake_ytdl: type[FakeYoutubeDL]) -> None:
+    fake_ytdl.result = yt_dlp.networking.exceptions.HTTPError.__new__(
+        yt_dlp.networking.exceptions.HTTPError
+    )
+    track = SubtitleTrack("ru", "https://subs/ru.vtt", "vtt", automatic=True)
+
+    with pytest.raises(SubtitlesUnavailableError):
+        await YtDlpVideoDownloader().fetch_subtitle_text(track)
 
 
 async def test_download_audio_returns_downloaded_file(

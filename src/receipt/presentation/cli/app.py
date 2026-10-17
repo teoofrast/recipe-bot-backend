@@ -7,6 +7,7 @@ from receipt.application.errors import ApplicationError, VideoUnavailableError
 from receipt.application.mediator import Mediator
 from receipt.application.system.ping import Ping, PingStream
 from receipt.application.video.get_video_info import GetVideoInfo
+from receipt.application.video.get_video_text import GetVideoText
 from receipt.domain.errors import DomainError
 
 
@@ -18,6 +19,10 @@ def build_parser() -> argparse.ArgumentParser:
     ping_stream.add_argument("--count", type=int, default=3)
     video_info = commands.add_parser("video-info", help="show video metadata by link")
     video_info.add_argument("url")
+    video_text = commands.add_parser(
+        "video-text", help="show the video's text: title, description and subtitles"
+    )
+    video_text.add_argument("url")
     return parser
 
 
@@ -39,6 +44,17 @@ async def run(args: argparse.Namespace, mediator: Mediator) -> None:
             duration = "-" if video.duration_seconds is None else f"{video.duration_seconds} с"
             print(f"Длительность: {duration}")
             print(f"Описание:\n{video.description or '-'}")
+        case "video-text":
+            result = await mediator.send(GetVideoText(url=args.url))
+            track = result.subtitle_track
+            if track is None:
+                source = "нет"
+            else:
+                source = f"{track.language} ({'автоматические' if track.automatic else 'ручные'})"
+            print(f"Субтитры:              {source}")
+            print(f"Нужна транскрибация:   {'да' if result.text.needs_transcription else 'нет'}")
+            print()
+            print(result.text.combined())
 
 
 def main(argv: Sequence[str], mediator: Mediator) -> None:
