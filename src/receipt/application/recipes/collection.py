@@ -1,13 +1,21 @@
 """The saved recipe collection: commands change it, queries only read it."""
 
+import logging
 from dataclasses import dataclass
 
 from receipt.application.cqrs import Command, Query
-from receipt.application.errors import DuplicateRecipeError, RecipeNotFoundError
+from receipt.application.errors import (
+    DuplicateRecipeError,
+    RecipeNotFoundError,
+    SearchUnavailableError,
+)
 from receipt.application.ports.clock import Clock
+from receipt.application.ports.recipe_index import RecipeIndex
 from receipt.application.ports.recipe_repository import RecipeRepository
 from receipt.domain.recipe import Recipe, SavedRecipe, new_recipe_id
 from receipt.domain.source_text import SourceText
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -24,8 +32,9 @@ class SaveRecipe(Command[SaveResult]):
 
 
 class SaveRecipeHandler:
-    def __init__(self, repository: RecipeRepository, clock: Clock) -> None:
+    def __init__(self, repository: RecipeRepository, index: RecipeIndex, clock: Clock) -> None:
         self._repository = repository
+        self._index = index
         self._clock = clock
 
     async def handle(self, request: SaveRecipe) -> SaveResult:
@@ -45,6 +54,11 @@ class SaveRecipeHandler:
             existing = await self._repository.get_by_source(key)
             assert existing is not None
             return SaveResult(saved=existing, created=False)
+        try:
+            await self._index.index(saved)
+        except SearchUnavailableError:
+            # The files are the source of truth: the recipe is saved, ReindexRecipes catches up.
+            logger.warning("Recipe %s saved but not indexed: search is unavailable", saved.id)
         return SaveResult(saved=saved, created=True)
 
 
@@ -83,9 +97,15 @@ class DeleteRecipe(Command[None]):
 
 
 class DeleteRecipeHandler:
-    def __init__(self, repository: RecipeRepository) -> None:
+    def __init__(self, repository: RecipeRepository, index: RecipeIndex) -> None:
         self._repository = repository
+        self._index = index
 
     async def handle(self, request: DeleteRecipe) -> None:
         if not await self._repository.delete(request.recipe_id):
             raise RecipeNotFoundError(request.recipe_id)
+        try:
+            await self._index.remove(request.recipe_id)
+        except SearchUnavailableError:
+            # Search skips hits whose recipe is gone; ReindexRecipes cleans the index up.
+            logger.warning("Recipe %s deleted but still in the index", request.recipe_id)

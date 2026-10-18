@@ -68,6 +68,8 @@ docker compose run --rm api receipt extract "https://www.youtube.com/watch?v=QPy
 docker compose run --rm api receipt list            # сохранённые рецепты
 docker compose run --rm api receipt show <id>
 docker compose run --rm api receipt delete <id>
+docker compose run --rm api receipt search "что приготовить из курицы" [--max-minutes 30] [--tag ужин]
+docker compose run --rm api receipt reindex         # пересобрать поиск из data/recipes
 ```
 
 ## Хранение рецептов
@@ -79,6 +81,19 @@ docker compose run --rm api receipt delete <id>
 
 Контейнер работает не от root, а от пользователя с UID 1000, поэтому файлы в `data/` — ваши.
 Если ваш UID другой (`id -u`), соберите образ с `docker compose build --build-arg APP_UID=$(id -u)`.
+
+## Поиск по рецептам
+
+Поиск по смыслу: Chroma (сервис в docker-compose) + эмбеддинги OpenRouter `intfloat/multilingual-e5-large`
+(выбрана пробой на русских рецептах: 7/7 запросов, включая английский к русским рецептам; ~$0.01 за 1M токенов).
+
+- Один рецепт — один документ: название, кухня, теги, ингредиенты, шаги.
+- Фильтры: `--max-minutes` (рецепты с неизвестным временем не проходят), `--tag`, `--cuisine`.
+- Индекс — производное от `data/recipes`: при сохранении и удалении он обновляется, а если Chroma
+  была недоступна, рецепт всё равно сохраняется/удаляется, и `receipt reindex` всё догоняет.
+- `SEARCH_MIN_SCORE` (0.78) отсекает бессмыслицу: у E5 всё русское похоже на 0.7–0.9, подходящие
+  рецепты набирали от 0.795, «как поменять колесо» — 0.75. Тоньше судит ассистент (карточка 9).
+- Локально (`uv run`) Chroma доступна на `localhost:8001`: `docker compose up -d chroma`.
 
 ## Распознавание речи
 

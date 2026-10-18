@@ -40,6 +40,10 @@ class DuplicateRecipeError(ApplicationError):
         self.source_key = source_key
 
 
+class SearchUnavailableError(ApplicationError):
+    """The search index or the embeddings service does not answer."""
+
+
 class LlmUnavailableError(ApplicationError):
     """No language model answered: wrong key, every model failed or hit its limit."""
 

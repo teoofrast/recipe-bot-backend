@@ -48,6 +48,16 @@ class Settings(BaseSettings):
     llm_extract_timeout_seconds: float = 120
     llm_chat_timeout_seconds: float = 40
 
+    # Search index. Local runs reach the compose service on the host port; inside compose
+    # docker-compose.yml sets chroma:8000.
+    chroma_host: str = "localhost"
+    chroma_port: int = 8001
+    embedding_model: str = "intfloat/multilingual-e5-large"
+    # E5 similarities sit in 0.7-0.9 for anything in Russian: on a probe, recipes that fit a
+    # query scored 0.795-0.864, unrelated queries ("как поменять колесо") about 0.75. The floor
+    # only drops such nonsense; closer judgement is the assistant's job.
+    search_min_score: float = 0.78
+
     @field_validator(
         "subtitle_languages", "stt_models", "llm_extract_models", "llm_chat_models", mode="before"
     )
