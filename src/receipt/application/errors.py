@@ -32,6 +32,12 @@ class RecipeNotFoundError(ApplicationError):
         self.recipe_id = recipe_id
 
 
+class ImportJobNotFoundError(ApplicationError):
+    def __init__(self, job_id: str) -> None:
+        super().__init__(f"Импорт {job_id} не найден")
+        self.job_id = job_id
+
+
 class DuplicateRecipeError(ApplicationError):
     """A recipe from this video is already saved."""
 

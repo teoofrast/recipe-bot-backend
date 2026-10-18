@@ -7,6 +7,8 @@ import punq
 from receipt.application.behaviors import ErrorBehavior, LoggingBehavior
 from receipt.application.mediator import Mediator
 from receipt.application.ports.clock import Clock
+from receipt.application.ports.import_jobs import ImportJobRepository
+from receipt.application.ports.import_pipeline import RecipeImportPipeline
 from receipt.application.ports.recipe_extractor import RecipeExtractor
 from receipt.application.ports.recipe_index import RecipeIndex
 from receipt.application.ports.recipe_repository import RecipeRepository
@@ -23,6 +25,15 @@ from receipt.application.recipes.collection import (
     SaveRecipeHandler,
 )
 from receipt.application.recipes.extract_recipe import ExtractRecipe, ExtractRecipeHandler
+from receipt.application.recipes.import_recipe import (
+    CreateImportJob,
+    CreateImportJobHandler,
+    GetImportStatus,
+    GetImportStatusHandler,
+    ImportLimiter,
+    ImportRecipe,
+    ImportRecipeHandler,
+)
 from receipt.application.recipes.search import (
     ReindexRecipes,
     ReindexRecipesHandler,
@@ -42,6 +53,8 @@ from receipt.application.video.get_video_transcript import (
 )
 from receipt.bootstrap.settings import Settings
 from receipt.infrastructure.clock import SystemClock
+from receipt.infrastructure.imports.in_memory_jobs import InMemoryImportJobRepository
+from receipt.infrastructure.imports.langgraph_pipeline import LangGraphImportPipeline
 from receipt.infrastructure.llm.provider import ChatModelProvider, Purpose
 from receipt.infrastructure.recipes.json_repository import JsonFileRecipeRepository
 from receipt.infrastructure.recipes.llm_extractor import LlmRecipeExtractor
@@ -63,6 +76,9 @@ HANDLERS: dict[type[Any], type[Any]] = {
     DeleteRecipe: DeleteRecipeHandler,
     SearchRecipes: SearchRecipesHandler,
     ReindexRecipes: ReindexRecipesHandler,
+    CreateImportJob: CreateImportJobHandler,
+    ImportRecipe: ImportRecipeHandler,
+    GetImportStatus: GetImportStatusHandler,
 }
 
 
@@ -116,6 +132,10 @@ def build_container(settings: Settings | None = None) -> punq.Container:
             min_score=settings.search_min_score,
         ),
     )
+    container.register(ImportJobRepository, instance=InMemoryImportJobRepository())
+    container.register(ImportLimiter, instance=ImportLimiter(settings.import_concurrency))
+    # Built on first use, so that adapters re-registered by tests are the ones it gets.
+    container.register(RecipeImportPipeline, LangGraphImportPipeline, scope=punq.Scope.singleton)
 
     # Handlers are transient: a fresh instance per request.
     for handler_type in HANDLERS.values():
