@@ -78,6 +78,25 @@ async def test_fetch_metadata_maps_yt_dlp_info(fake_ytdl: type[FakeYoutubeDL]) -
     assert fake_ytdl.calls[0]["noplaylist"] is True
 
 
+@pytest.mark.parametrize("title", ["Video by appetitnotv", "Reel by chef.anna", " video by x "])
+async def test_instagram_made_up_title_is_dropped(
+    fake_ytdl: type[FakeYoutubeDL], title: str
+) -> None:
+    fake_ytdl.result = {**INFO, "title": title}
+
+    metadata = await YtDlpVideoDownloader().fetch_metadata(YOUTUBE_URL)
+
+    assert metadata.title == ""
+
+
+async def test_a_title_mentioning_by_is_kept(fake_ytdl: type[FakeYoutubeDL]) -> None:
+    fake_ytdl.result = {**INFO, "title": "Борщ by шеф Иван"}
+
+    metadata = await YtDlpVideoDownloader().fetch_metadata(YOUTUBE_URL)
+
+    assert metadata.title == "Борщ by шеф Иван"
+
+
 async def test_fetch_metadata_tolerates_missing_fields(fake_ytdl: type[FakeYoutubeDL]) -> None:
     fake_ytdl.result = {"id": 42, "channel": "chef-channel"}
 

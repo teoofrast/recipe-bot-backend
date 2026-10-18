@@ -108,7 +108,7 @@ class LlmRecipeExtractor:
             extracted: ExtractedRecipe = await chain.ainvoke(
                 [("system", SYSTEM_PROMPT), ("user", content)]
             )
-        return to_recipe(extracted, source, content)
+        return to_recipe(extracted, source, content, fallback_title=title_from_text(text))
 
 
 MAX_TAGS = 5
@@ -142,6 +142,20 @@ def clean_title(title: str) -> str:
     return title[:1].upper() + title[1:]
 
 
+MAX_TITLE = 60
+
+
+def title_from_text(text: SourceText) -> str:
+    """When the model gives no title: the video's own, or the description's first line
+    ("Говядина в масле, приготовленная с помощью..." → "Говядина в масле")."""
+    for candidate in (text.title, text.description):
+        line = next((line for line in candidate.splitlines() if line.strip()), "")
+        line = re.split(r"[,.!?:;]", clean_title(line))[0].strip()
+        if line:
+            return line if len(line) <= MAX_TITLE else line[:MAX_TITLE].rsplit(" ", 1)[0]
+    return ""
+
+
 def clean_tags(tags: list[str], source_text: str) -> tuple[str, ...]:
     """Drops hashtags copied from the description ("сырникирецепт"); keeps the first few."""
     hashtags = {match.lower() for match in re.findall(r"#(\w+)", source_text)}
@@ -150,7 +164,10 @@ def clean_tags(tags: list[str], source_text: str) -> tuple[str, ...]:
 
 
 def to_recipe(
-    extracted: ExtractedRecipe, source: RecipeSource, source_text: str = ""
+    extracted: ExtractedRecipe,
+    source: RecipeSource,
+    source_text: str = "",
+    fallback_title: str = "",
 ) -> Recipe | None:
     """None when the model found no recipe or returned one the domain does not accept."""
     if not extracted.has_recipe:
@@ -163,7 +180,8 @@ def to_recipe(
             logger.info("Skipped an invalid ingredient: %s", item)
     try:
         return Recipe(
-            title=clean_title(extracted.title or ""),
+            # Models sometimes leave the title out of an otherwise good recipe.
+            title=clean_title(extracted.title or "") or fallback_title,
             ingredients=tuple(ingredients),
             steps=tuple(extracted.steps),
             source=source,

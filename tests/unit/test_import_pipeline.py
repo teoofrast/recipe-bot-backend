@@ -10,6 +10,8 @@ from receipt.application.ports.video_downloader import SubtitleTrack
 from receipt.application.recipes.collection import GetRecipe
 from receipt.application.recipes.import_recipe import ImportRecipe
 from receipt.domain.import_job import ImportStatus
+from receipt.domain.recipe import Ingredient, Recipe, RecipeSource
+from receipt.domain.video import Platform
 from receipt.infrastructure.imports import langgraph_pipeline
 from receipt.infrastructure.imports.langgraph_pipeline import LangGraphImportPipeline
 from tests.fakes import (
@@ -91,6 +93,96 @@ async def test_speech_path_transcribes_first(
     assert language == "ru"
 
 
+CAPTION = "Ингредиенты: свёкла 500 г, капуста 300 г, картофель 400 г"
+
+
+async def test_a_caption_without_the_method_is_completed_from_the_speech(
+    pipeline: LangGraphImportPipeline,
+    video_downloader: FakeVideoDownloader,
+    transcriber: FakeTranscriber,
+    recipe_extractor: FakeRecipeExtractor,
+    recipe_repository: InMemoryRecipeRepository,
+) -> None:
+    video_downloader.description = CAPTION
+    recipe_extractor.method_only_in_speech = True
+
+    outcome, stages = await run(pipeline)
+
+    assert stages == [
+        ImportStatus.READING,
+        ImportStatus.EXTRACTING,
+        ImportStatus.TRANSCRIBING,
+        ImportStatus.EXTRACTING,
+        ImportStatus.SAVING,
+    ]
+    assert len(transcriber.calls) == 1
+    saved = recipe_repository.recipes[outcome.recipe_id]
+    assert saved.recipe.steps == ("Нарежьте свёклу", "Сварите")
+    assert saved.source_text.transcript == "Берём свёклу и капусту"
+
+
+async def test_a_silent_video_keeps_the_caption_recipe(
+    pipeline: LangGraphImportPipeline,
+    video_downloader: FakeVideoDownloader,
+    transcriber: FakeTranscriber,
+    recipe_extractor: FakeRecipeExtractor,
+    recipe_repository: InMemoryRecipeRepository,
+) -> None:
+    video_downloader.description = CAPTION
+    recipe_extractor.method_only_in_speech = True
+    transcriber.text = ""
+
+    outcome, _ = await run(pipeline)
+
+    assert outcome.kind is OutcomeKind.SAVED
+    assert len(transcriber.calls) == 1  # listened once, not in a loop
+    assert recipe_repository.recipes[outcome.recipe_id].recipe.steps == ("Сварите",)
+
+
+def test_the_fuller_recipe_wins() -> None:
+    def with_steps(*steps: str) -> Recipe:
+        return Recipe(
+            "Борщ", (Ingredient("свёкла"),), steps, RecipeSource("u", Platform.YOUTUBE, "v")
+        )
+
+    one, two, none = with_steps("Сварите"), with_steps("Нарежьте", "Сварите"), with_steps()
+    assert langgraph_pipeline.fuller(one, two) is two
+    assert langgraph_pipeline.fuller(one, none) is one  # the model lost the method this time
+    assert langgraph_pipeline.fuller(one, None) is one
+    assert langgraph_pipeline.fuller(None, two) is two
+    assert langgraph_pipeline.fuller(None, None) is None
+
+
+async def test_subtitles_are_not_listened_to_again(
+    pipeline: LangGraphImportPipeline,
+    video_downloader: FakeVideoDownloader,
+    transcriber: FakeTranscriber,
+    recipe_extractor: FakeRecipeExtractor,
+) -> None:
+    video_downloader.subtitle_tracks = (RU_AUTO,)
+    video_downloader.subtitles = {"ru": "Берём свёклу"}
+    recipe_extractor.method_only_in_speech = True
+
+    outcome, _ = await run(pipeline)
+
+    assert outcome.kind is OutcomeKind.SAVED
+    assert transcriber.calls == []
+
+
+async def test_a_full_caption_needs_no_speech(
+    pipeline: LangGraphImportPipeline,
+    video_downloader: FakeVideoDownloader,
+    transcriber: FakeTranscriber,
+) -> None:
+    video_downloader.description = CAPTION
+
+    outcome, stages = await run(pipeline)
+
+    assert outcome.kind is OutcomeKind.SAVED
+    assert ImportStatus.TRANSCRIBING not in stages
+    assert transcriber.calls == []
+
+
 async def test_a_saved_video_stops_before_the_llm(
     pipeline: LangGraphImportPipeline, recipe_extractor: FakeRecipeExtractor
 ) -> None:
@@ -117,6 +209,7 @@ async def test_no_recipe_is_not_saved(
 
     assert outcome == ImportOutcome(OutcomeKind.NO_RECIPE)
     assert ImportStatus.SAVING not in stages
+    assert len(transcriber.calls) == 1  # the speech was heard once, before the extraction
     assert recipe_repository.recipes == {}
 
 
@@ -150,6 +243,8 @@ def test_the_graph_has_the_designed_shape(pipeline: LangGraphImportPipeline) -> 
         "check_saved -.-> extract",
         "transcribe --> extract",
         "extract -.-> save",
+        "extract -.-> transcribe",
+        "extract -.-> no_recipe",
         "save --> __end__",
     ):
         assert edge in mermaid
