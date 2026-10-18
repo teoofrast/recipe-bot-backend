@@ -17,8 +17,9 @@ build/
 !.env.example
 cookies*.txt
 
-# Data
-data/
+# Data: the folder is kept in git, so Docker does not create it as root
+data/*
+!data/.gitkeep
 
 # IDE / OS
 .idea/

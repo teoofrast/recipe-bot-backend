@@ -1,9 +1,10 @@
 from datetime import datetime
 from pathlib import Path
 
+from receipt.application.errors import DuplicateRecipeError
 from receipt.application.ports.transcriber import Transcript
 from receipt.application.ports.video_downloader import SubtitleTrack, VideoMetadata
-from receipt.domain.recipe import Ingredient, Recipe, RecipeSource
+from receipt.domain.recipe import Ingredient, Recipe, RecipeSource, SavedRecipe
 from receipt.domain.source_text import SourceText
 from receipt.domain.video import detect_platform
 
@@ -91,3 +92,30 @@ class FakeRecipeExtractor:
             steps=("Сварите",),
             source=source,
         )
+
+
+class InMemoryRecipeRepository:
+    """RecipeRepository in a dict; passes the same contract tests as the JSON files."""
+
+    def __init__(self) -> None:
+        self.recipes: dict[str, SavedRecipe] = {}
+
+    async def add(self, saved: SavedRecipe) -> None:
+        if await self.get_by_source(saved.recipe.source.key):
+            raise DuplicateRecipeError(saved.recipe.source.key)
+        self.recipes[saved.id] = saved
+
+    async def get(self, recipe_id: str) -> SavedRecipe | None:
+        return self.recipes.get(recipe_id)
+
+    async def get_by_source(self, source_key: str) -> SavedRecipe | None:
+        return next(
+            (saved for saved in self.recipes.values() if saved.recipe.source.key == source_key),
+            None,
+        )
+
+    async def list_all(self) -> list[SavedRecipe]:
+        return sorted(self.recipes.values(), key=lambda saved: saved.saved_at, reverse=True)
+
+    async def delete(self, recipe_id: str) -> bool:
+        return self.recipes.pop(recipe_id, None) is not None

@@ -1,7 +1,10 @@
 import re
+import secrets
 from dataclasses import dataclass, field
+from datetime import datetime
 
 from receipt.domain.errors import DomainError
+from receipt.domain.source_text import SourceText
 from receipt.domain.video import Platform
 
 
@@ -72,6 +75,11 @@ class RecipeSource:
     video_id: str
     author: str | None = None
 
+    @property
+    def key(self) -> str:
+        """One video, however the link was written: youtu.be/x and youtube.com/watch?v=x."""
+        return f"{self.platform}:{self.video_id}"
+
 
 @dataclass(frozen=True)
 class Recipe:
@@ -98,3 +106,19 @@ class Recipe:
         object.__setattr__(self, "steps", tuple(s.strip() for s in self.steps if s.strip()))
         tags = dict.fromkeys(t.strip().lower() for t in self.tags if t.strip())
         object.__setattr__(self, "tags", tuple(tags))
+
+
+def new_recipe_id() -> str:
+    """Short enough to type in the CLI or a bot command: "a3f9c2e1b7"."""
+    return secrets.token_hex(5)
+
+
+@dataclass(frozen=True)
+class SavedRecipe:
+    """A recipe kept in the collection, with the text it was extracted from."""
+
+    id: str
+    recipe: Recipe
+    saved_at: datetime
+    # Kept to re-extract the recipe later with a better prompt or model.
+    source_text: SourceText
