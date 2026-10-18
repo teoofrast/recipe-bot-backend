@@ -1,25 +1,15 @@
 import json
-from collections.abc import AsyncIterator
 
 import pytest
-from httpx import ASGITransport, AsyncClient
-
-from receipt.application.mediator import Mediator
-from receipt.presentation.api.app import create_app
+from httpx import AsyncClient
 
 
-@pytest.fixture
-async def client(mediator: Mediator) -> AsyncIterator[AsyncClient]:
-    transport = ASGITransport(app=create_app(mediator))
-    async with AsyncClient(transport=transport, base_url="http://test") as client:
-        yield client
-
-
-def parse_sse(body: str) -> list[tuple[str, dict[str, str]]]:
+def parse_sse(body: str) -> list[tuple[str, dict[str, object]]]:
     events = []
     for block in body.replace("\r\n", "\n").strip().split("\n\n"):
         fields = dict(line.split(": ", 1) for line in block.splitlines() if ": " in line)
-        events.append((fields["event"], json.loads(fields["data"])))
+        if "event" in fields:
+            events.append((fields["event"], json.loads(fields["data"])))
     return events
 
 
@@ -48,7 +38,53 @@ async def test_ping_stream_sends_each_chunk_as_sse_event(client: AsyncClient) ->
     ]
 
 
-async def test_ping_stream_validates_count(client: AsyncClient) -> None:
+async def test_validation_errors_use_the_common_format(client: AsyncClient) -> None:
     response = await client.get("/ping/stream", params={"count": 0})
 
     assert response.status_code == 422
+    assert response.json()["error"]["code"] == "validation_error"
+    assert "count" in response.json()["error"]["message"]
+
+
+@pytest.mark.parametrize(
+    ("method", "path"),
+    [
+        ("GET", "/health"),
+        ("GET", "/ping"),
+        ("POST", "/imports"),
+        ("GET", "/imports/abc"),
+        ("GET", "/recipes"),
+        ("GET", "/recipes/search?q=x"),
+        ("GET", "/recipes/abc"),
+        ("DELETE", "/recipes/abc"),
+        ("POST", "/chat"),
+        ("POST", "/chat/stream"),
+        ("POST", "/admin/reindex"),
+    ],
+)
+async def test_every_endpoint_needs_the_key(anonymous: AsyncClient, method: str, path: str) -> None:
+    response = await anonymous.request(method, path)
+
+    assert response.status_code == 401
+    assert response.json() == {
+        "error": {"code": "unauthorized", "message": "Нужен правильный заголовок X-API-Key"}
+    }
+
+
+async def test_a_wrong_key_is_refused(anonymous: AsyncClient) -> None:
+    response = await anonymous.get("/health", headers={"X-API-Key": "test-key-0123456780"})
+
+    assert response.status_code == 401
+
+
+def test_openapi_lists_the_key_and_the_chat_stream_events(client: AsyncClient) -> None:
+    app = client._transport.app  # type: ignore[attr-defined]
+    schema = app.openapi()
+
+    assert "APIKeyHeader" in schema["components"]["securitySchemes"]
+    for name in ("TokenData", "ToolData", "SourcesData", "DoneData", "ErrorData"):
+        assert name in schema["components"]["schemas"]
+    assert (
+        "text/event-stream"
+        in schema["paths"]["/chat/stream"]["post"]["responses"]["200"]["content"]
+    )
