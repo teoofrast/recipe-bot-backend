@@ -51,9 +51,11 @@ def _document_stream_events(app: FastAPI) -> None:
         schema = original()
         components = schema.setdefault("components", {}).setdefault("schemas", {})
         for model in (TokenData, ToolData, SourcesData, DoneData, ErrorData):
-            components[model.__name__] = model.model_json_schema(
-                ref_template="#/components/schemas/{model}"
-            )
+            body = model.model_json_schema(ref_template="#/components/schemas/{model}")
+            # Nested models go next to the others, not into the event body.
+            for name, nested in body.pop("$defs", {}).items():
+                components.setdefault(name, nested)
+            components[model.__name__] = body
         app.openapi_schema = schema
         return schema
 
