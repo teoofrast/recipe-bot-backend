@@ -26,6 +26,8 @@ class SourceText:
     title: str
     description: str
     subtitles: str = ""
+    # Speech recognized from the audio, when subtitles and description were not enough.
+    transcript: str = ""
 
     @property
     def has_subtitles(self) -> bool:
@@ -41,6 +43,7 @@ class SourceText:
             ("Название", self.title),
             ("Описание", self.description),
             ("Субтитры", self.subtitles),
+            ("Речь из видео (распознана автоматически)", self.transcript),
         )
         return "\n\n".join(
             f"{label}:\n{value.strip()}" for label, value in sections if value.strip()

@@ -122,14 +122,18 @@ class ChatModelProvider:
         models: Mapping[Purpose, Sequence[str]],
         *,
         base_url: str = OPENROUTER_URL,
-        timeout_seconds: float = 30,
+        timeout_seconds: float | Mapping[Purpose, float] = 30,
         max_retries: int = 1,
-        model_factory: Callable[[str], BaseChatModel] | None = None,
+        model_factory: Callable[[str, float], BaseChatModel] | None = None,
     ) -> None:
         self._api_key = api_key
         self._models = {purpose: list(ids) for purpose, ids in models.items()}
         self._base_url = base_url
-        self._timeout = timeout_seconds
+        self._timeouts = (
+            dict(timeout_seconds)
+            if isinstance(timeout_seconds, Mapping)
+            else dict.fromkeys(Purpose, timeout_seconds)
+        )
         self._max_retries = max_retries
         self._model_factory = model_factory or self._openrouter_model
 
@@ -152,20 +156,22 @@ class ChatModelProvider:
         model_ids = self.model_ids(purpose)
         if not model_ids:
             raise LlmUnavailableError(f"Не задан список моделей для задачи «{purpose}»")
+        timeout = self._timeouts[purpose]
         first, *rest = [
-            _Deadline(build(self._model_factory(model_id)), self._timeout) for model_id in model_ids
+            _Deadline(build(self._model_factory(model_id, timeout)), timeout)
+            for model_id in model_ids
         ]
         if not rest:
             return first
         return first.with_fallbacks(rest, exceptions_to_handle=FALLBACK_ERRORS)
 
-    def _openrouter_model(self, model_id: str) -> BaseChatModel:
+    def _openrouter_model(self, model_id: str, timeout: float) -> BaseChatModel:
         assert self._api_key is not None
         return ChatOpenAI(
             model=model_id,
             api_key=SecretStr(self._api_key),
             base_url=self._base_url,
-            timeout=self._timeout,
+            timeout=timeout,
             max_retries=self._max_retries,
             default_headers={"X-Title": "Recipe Bot"},
             callbacks=[_ModelLogger(model_id)],

@@ -7,8 +7,10 @@ import punq
 from receipt.application.behaviors import ErrorBehavior, LoggingBehavior
 from receipt.application.mediator import Mediator
 from receipt.application.ports.clock import Clock
+from receipt.application.ports.recipe_extractor import RecipeExtractor
 from receipt.application.ports.transcriber import Transcriber
 from receipt.application.ports.video_downloader import SubtitleFetcher, VideoDownloader
+from receipt.application.recipes.extract_recipe import ExtractRecipe, ExtractRecipeHandler
 from receipt.application.system.ping import Ping, PingHandler, PingStream, PingStreamHandler
 from receipt.application.video.get_video_info import GetVideoInfo, GetVideoInfoHandler
 from receipt.application.video.get_video_text import (
@@ -23,6 +25,7 @@ from receipt.application.video.get_video_transcript import (
 from receipt.bootstrap.settings import Settings
 from receipt.infrastructure.clock import SystemClock
 from receipt.infrastructure.llm.provider import ChatModelProvider, Purpose
+from receipt.infrastructure.recipes.llm_extractor import LlmRecipeExtractor
 from receipt.infrastructure.transcription.openrouter import OpenRouterTranscriber
 from receipt.infrastructure.video.yt_dlp_downloader import YtDlpVideoDownloader
 
@@ -32,6 +35,7 @@ HANDLERS: dict[type[Any], type[Any]] = {
     GetVideoInfo: GetVideoInfoHandler,
     GetVideoText: GetVideoTextHandler,
     GetVideoTranscript: GetVideoTranscriptHandler,
+    ExtractRecipe: ExtractRecipeHandler,
 }
 
 
@@ -56,7 +60,7 @@ def build_container(settings: Settings | None = None) -> punq.Container:
         Transcriber,
         instance=OpenRouterTranscriber(api_key=api_key, models=settings.stt_models),
     )
-    # Used by the recipe extractor (card 5) and the assistant (card 9).
+    # Used by the recipe extractor and the assistant (card 9).
     container.register(
         ChatModelProvider,
         instance=ChatModelProvider(
@@ -65,9 +69,13 @@ def build_container(settings: Settings | None = None) -> punq.Container:
                 Purpose.EXTRACT: settings.llm_extract_models,
                 Purpose.CHAT: settings.llm_chat_models,
             },
-            timeout_seconds=settings.llm_timeout_seconds,
+            timeout_seconds={
+                Purpose.EXTRACT: settings.llm_extract_timeout_seconds,
+                Purpose.CHAT: settings.llm_chat_timeout_seconds,
+            },
         ),
     )
+    container.register(RecipeExtractor, LlmRecipeExtractor, scope=punq.Scope.singleton)
 
     # Handlers are transient: a fresh instance per request.
     for handler_type in HANDLERS.values():
