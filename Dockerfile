@@ -6,6 +6,11 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
+# Not root: files written to the mounted ./data belong to the host user (UID 1000 is the
+# first user on most Linux machines). Another UID: build with --build-arg APP_UID=$(id -u).
+ARG APP_UID=1000
+RUN useradd --create-home --uid ${APP_UID} app
+
 COPY --from=uv /uv /usr/local/bin/uv
 
 ENV UV_COMPILE_BYTECODE=1 \
@@ -25,6 +30,10 @@ COPY src ./src
 COPY tests ./tests
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen
+
+# The app user may write next to the code: pytest's cache, yt-dlp and deno caches live in $HOME.
+RUN chown app /app
+USER app
 
 EXPOSE 8000
 

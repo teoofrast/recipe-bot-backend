@@ -123,6 +123,8 @@ def _to_ingredient(item: ExtractedIngredient) -> Ingredient:
     if amount is None and unit is not None:
         if unit in _SINGLE_MEASURES:
             amount = 1
+        elif unit == "шт":
+            unit = None  # "яйцо, шт" says nothing beyond "яйцо"
         else:
             # A unit without a number ("2–3 шт.", "г") is not a quantity; keep it as a remark.
             note = ", ".join(part for part in (unit, note) if part)

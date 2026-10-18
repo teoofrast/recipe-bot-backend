@@ -26,6 +26,20 @@ _REASON_TEXT = {
 }
 
 
+class RecipeNotFoundError(ApplicationError):
+    def __init__(self, recipe_id: str) -> None:
+        super().__init__(f"Рецепт {recipe_id} не найден")
+        self.recipe_id = recipe_id
+
+
+class DuplicateRecipeError(ApplicationError):
+    """A recipe from this video is already saved."""
+
+    def __init__(self, source_key: str) -> None:
+        super().__init__(f"Рецепт из этого видео уже сохранён ({source_key})")
+        self.source_key = source_key
+
+
 class LlmUnavailableError(ApplicationError):
     """No language model answered: wrong key, every model failed or hit its limit."""
 

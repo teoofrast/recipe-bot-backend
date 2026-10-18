@@ -64,7 +64,21 @@ docker compose run --rm api receipt video-info "https://youtu.be/jNQXAC9IVRw"
 docker compose run --rm api receipt video-text "https://youtu.be/jNQXAC9IVRw"  # название, описание, субтитры
 docker compose run --rm api receipt transcribe "https://youtu.be/jNQXAC9IVRw"  # речь из аудио через OpenRouter
 docker compose run --rm api receipt extract "https://www.youtube.com/watch?v=QPy2sA8HC5U"  # рецепт (без сохранения)
+docker compose run --rm api receipt extract "https://www.youtube.com/watch?v=QPy2sA8HC5U" --save
+docker compose run --rm api receipt list            # сохранённые рецепты
+docker compose run --rm api receipt show <id>
+docker compose run --rm api receipt delete <id>
 ```
+
+## Хранение рецептов
+
+Каждый рецепт — файл `data/recipes/<id>.json`: сам рецепт, источник (ссылка, платформа, ID видео,
+автор) и исходный текст (описание, субтитры, распознанная речь), чтобы рецепт можно было переизвлечь.
+Одно видео сохраняется один раз: дубли ищутся по платформе и ID видео, так что `youtu.be/x` и
+`youtube.com/watch?v=x` — одно и то же.
+
+Контейнер работает не от root, а от пользователя с UID 1000, поэтому файлы в `data/` — ваши.
+Если ваш UID другой (`id -u`), соберите образ с `docker compose build --build-arg APP_UID=$(id -u)`.
 
 ## Распознавание речи
 

@@ -124,6 +124,8 @@ def test_invalid_ingredients_are_skipped() -> None:
         (ingredient(unit="чайную ложку"), Ingredient("мука", 1, "ч. л.")),
         # A unit without a number that is not a measure is kept as a remark.
         (ingredient(unit="2–3 шт.", note=None), Ingredient("мука", note="2–3 шт.")),
+        # A bare "шт" without a number says nothing.
+        (ingredient(unit="шт", note=None), Ingredient("мука")),
         (ingredient(unit="г", note="по вкусу"), Ingredient("мука", note="г, по вкусу")),
     ],
 )

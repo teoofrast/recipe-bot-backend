@@ -15,6 +15,9 @@ class Settings(BaseSettings):
 
     log_level: str = "INFO"
 
+    # Saved recipes and other local data; mounted into the container as /app/data.
+    data_dir: Path = Path("data")
+
     # Netscape-format cookies for platforms that require login (usually Instagram).
     ytdlp_cookies_file: Path | None = None
 

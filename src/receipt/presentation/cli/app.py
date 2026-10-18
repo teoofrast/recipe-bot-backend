@@ -5,6 +5,12 @@ from collections.abc import Sequence
 
 from receipt.application.errors import ApplicationError, VideoUnavailableError
 from receipt.application.mediator import Mediator
+from receipt.application.recipes.collection import (
+    DeleteRecipe,
+    GetRecipe,
+    ListRecipes,
+    SaveRecipe,
+)
 from receipt.application.recipes.extract_recipe import ExtractRecipe
 from receipt.application.system.ping import Ping, PingStream
 from receipt.application.video.get_video_info import GetVideoInfo
@@ -32,6 +38,12 @@ def build_parser() -> argparse.ArgumentParser:
     extract = commands.add_parser("extract", help="extract the recipe from a video (not saved)")
     extract.add_argument("url")
     extract.add_argument("--show-text", action="store_true", help="also print the source text")
+    extract.add_argument("--save", action="store_true", help="save it to the collection")
+    commands.add_parser("list", help="list saved recipes, newest first")
+    show = commands.add_parser("show", help="show a saved recipe")
+    show.add_argument("recipe_id")
+    delete = commands.add_parser("delete", help="delete a saved recipe")
+    delete.add_argument("recipe_id")
     return parser
 
 
@@ -114,6 +126,27 @@ async def run(args: argparse.Namespace, mediator: Mediator) -> None:
             print(format_recipe(draft.recipe) if draft.recipe else "Рецепта в видео нет.")
             if args.show_text:
                 print("\n--- Исходный текст ---\n" + draft.text.combined())
+            if args.save and draft.recipe:
+                result = await mediator.send(
+                    SaveRecipe(recipe=draft.recipe, source_text=draft.text)
+                )
+                state = "Сохранён" if result.created else "Уже был сохранён раньше"
+                print(f"\n{state}: {result.saved.id}")
+        case "list":
+            recipes = await mediator.send(ListRecipes())
+            for saved in recipes:
+                date = saved.saved_at.strftime("%Y-%m-%d")
+                print(
+                    f"{saved.id}  {date}  {saved.recipe.source.platform:<9}  {saved.recipe.title}"
+                )
+            print(f"Всего: {len(recipes)}")
+        case "show":
+            saved = await mediator.send(GetRecipe(recipe_id=args.recipe_id))
+            print(format_recipe(saved.recipe))
+            print(f"Сохранён: {saved.saved_at:%Y-%m-%d %H:%M}, id {saved.id}")
+        case "delete":
+            await mediator.send(DeleteRecipe(recipe_id=args.recipe_id))
+            print(f"Удалён: {args.recipe_id}")
 
 
 def main(argv: Sequence[str], mediator: Mediator) -> None:
