@@ -37,4 +37,5 @@ USER app
 
 EXPOSE 8000
 
-CMD ["uvicorn", "receipt.bootstrap.api:create_api", "--factory", "--host", "0.0.0.0", "--port", "8000"]
+# One worker on purpose: import statuses, chats and the import limit live in the process.
+CMD ["uvicorn", "receipt.bootstrap.api:create_api", "--factory", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]

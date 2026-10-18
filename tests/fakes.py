@@ -1,6 +1,7 @@
-from collections.abc import Sequence
+from collections.abc import AsyncIterator, Sequence
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 from receipt.application.errors import (
     DuplicateRecipeError,
@@ -176,5 +177,21 @@ class FakeRecipeIndex:
         return sorted(hits, key=lambda hit: -hit.score)[:limit]
 
     def _fail(self) -> None:
+        if self.error is not None:
+            raise self.error
+
+
+class FakeAssistant:
+    """Replays ``events`` for any question; raises ``error`` after them, if set."""
+
+    def __init__(self) -> None:
+        self.events: list[Any] = []
+        self.error: Exception | None = None
+        self.questions: list[tuple[str, str]] = []
+
+    async def stream(self, chat_id: str, text: str) -> AsyncIterator[Any]:
+        self.questions.append((chat_id, text))
+        for event in self.events:
+            yield event
         if self.error is not None:
             raise self.error

@@ -4,6 +4,7 @@ import punq
 import pytest
 
 from receipt.application.mediator import Mediator
+from receipt.application.ports.assistant import RecipeAssistant
 from receipt.application.ports.clock import Clock
 from receipt.application.ports.recipe_extractor import RecipeExtractor
 from receipt.application.ports.recipe_index import RecipeIndex
@@ -13,6 +14,7 @@ from receipt.application.ports.video_downloader import SubtitleFetcher, VideoDow
 from receipt.bootstrap.container import build_container
 from receipt.bootstrap.settings import Settings
 from tests.fakes import (
+    FakeAssistant,
     FakeClock,
     FakeRecipeExtractor,
     FakeRecipeIndex,
@@ -50,12 +52,18 @@ def recipe_index() -> FakeRecipeIndex:
 
 
 @pytest.fixture
+def assistant() -> FakeAssistant:
+    return FakeAssistant()
+
+
+@pytest.fixture
 def container(
     video_downloader: FakeVideoDownloader,
     transcriber: FakeTranscriber,
     recipe_extractor: FakeRecipeExtractor,
     recipe_repository: InMemoryRecipeRepository,
     recipe_index: FakeRecipeIndex,
+    assistant: FakeAssistant,
 ) -> punq.Container:
     """Production wiring with external adapters replaced by fakes."""
     container = build_container(Settings(_env_file=None))
@@ -66,6 +74,7 @@ def container(
     container.register(RecipeExtractor, instance=recipe_extractor)
     container.register(RecipeRepository, instance=recipe_repository)
     container.register(RecipeIndex, instance=recipe_index)
+    container.register(RecipeAssistant, instance=assistant)
     return container
 
 

@@ -19,6 +19,7 @@ receipt/
 
 ```bash
 cp .env.example .env
+sed -i "s/^API_KEY=change-me$/API_KEY=$(openssl rand -hex 32)/" .env   # API не стартует с change-me
 docker compose up --build
 ```
 
@@ -100,6 +101,35 @@ graph TD;
 - Одновременно идут `IMPORT_CONCURRENCY` (2) импорта, остальные ждут в `queued`.
 - Повторы: чтение видео и скачивание аудио — до 3 раз при сбое связи (не при «приватное»/«удалено»);
   извлечение — ещё раз через 15 с, если все бесплатные модели упёрлись в лимиты.
+
+## REST API
+
+Все эндпоинты (и `/health`, и поток чата) требуют заголовок `X-API-Key: $API_KEY`, без него — 401.
+В Swagger (`/docs`) ключ вводится через кнопку **Authorize**.
+
+| Метод и путь | Что делает |
+|---|---|
+| `POST /imports` `{"url": ...}` | ставит видео в очередь импорта, сразу 202 с задачей |
+| `GET /imports/{id}` | статус: `queued → reading → [transcribing] → extracting → saving → done / no_recipe / failed` |
+| `GET /recipes` | все рецепты (кратко) |
+| `GET /recipes/search?q=...` | поиск; фильтры `max_minutes`, `tags` (можно несколько), `cuisine`, `limit` |
+| `GET /recipes/{id}`, `DELETE /recipes/{id}` | рецепт целиком / удалить |
+| `POST /chat/stream` `{"chat_id", "text"}` | ответ ассистента потоком SSE |
+| `POST /chat` | тот же ответ одним JSON (для бота и скриптов) |
+| `POST /admin/reindex` | пересобрать поисковый индекс из файлов |
+
+Ошибки всегда в одном виде: `{"error": {"code": "recipe_not_found", "message": "..."}}`
+(404 не найдено, 409 дубликат, 422 неверный запрос, 502 видео недоступно, 503 LLM/поиск/STT недоступны).
+
+Поток чата — события SSE: `tool`, `token` (много), `sources`, `done` или `error`
+(тела описаны в OpenAPI: `TokenData`, `ToolData`, `SourcesData`, `DoneData`, `ErrorData`):
+
+```bash
+curl -N -X POST localhost:8000/chat/stream -H "X-API-Key: $API_KEY" \
+  -H 'Content-Type: application/json' -d '{"chat_id": "me", "text": "Что приготовить из курицы?"}'
+```
+
+Импорты, диалоги и лимит импортов живут в памяти процесса, поэтому uvicorn запущен с одним воркером.
 
 ## Ассистент
 

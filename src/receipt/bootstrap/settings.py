@@ -15,6 +15,9 @@ class Settings(BaseSettings):
 
     log_level: str = "INFO"
 
+    # Every API request must send it in X-API-Key. Generate one: openssl rand -hex 32
+    api_key: SecretStr | None = None
+
     # Saved recipes and other local data; mounted into the container as /app/data.
     data_dir: Path = Path("data")
     # Imports running at once; the rest wait in the "queued" status.
@@ -73,7 +76,7 @@ class Settings(BaseSettings):
             return items or cls.model_fields[info.field_name].get_default(call_default_factory=True)
         return value
 
-    @field_validator("openrouter_api_key", mode="before")
+    @field_validator("openrouter_api_key", "api_key", mode="before")
     @classmethod
     def _empty_key_is_none(cls, value: object) -> object:
         return value or None
