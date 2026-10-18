@@ -59,13 +59,13 @@ class _ModelLogger(BaseCallbackHandler):
         if not served_by and response.generations and response.generations[0]:
             message = getattr(response.generations[0][0], "message", None)
             served_by = getattr(message, "response_metadata", {}).get("model_name")
-        logger.info("LLM %s answered (served by %s)", self._model_id, _once(served_by) or "?")
+        logger.info("LLM %s answered (served by %s)", self._model_id, once(served_by) or "?")
 
     def on_llm_error(self, error: BaseException, *, run_id: UUID, **kwargs: Any) -> None:
         logger.warning("LLM %s failed: %s: %s", self._model_id, type(error).__name__, error)
 
 
-def _once(text: str | None) -> str | None:
+def once(text: str | None) -> str | None:
     """ "ab" from "abab": streamed chunks' metadata is concatenated, so the name repeats."""
     if not text:
         return text

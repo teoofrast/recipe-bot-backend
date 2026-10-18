@@ -6,6 +6,7 @@ import punq
 
 from receipt.application.behaviors import ErrorBehavior, LoggingBehavior
 from receipt.application.mediator import Mediator
+from receipt.application.ports.assistant import RecipeAssistant
 from receipt.application.ports.clock import Clock
 from receipt.application.ports.import_jobs import ImportJobRepository
 from receipt.application.ports.import_pipeline import RecipeImportPipeline
@@ -14,6 +15,7 @@ from receipt.application.ports.recipe_index import RecipeIndex
 from receipt.application.ports.recipe_repository import RecipeRepository
 from receipt.application.ports.transcriber import Transcriber
 from receipt.application.ports.video_downloader import SubtitleFetcher, VideoDownloader
+from receipt.application.recipes.ask import AskQuestion, AskQuestionHandler
 from receipt.application.recipes.collection import (
     DeleteRecipe,
     DeleteRecipeHandler,
@@ -52,6 +54,7 @@ from receipt.application.video.get_video_transcript import (
     GetVideoTranscriptHandler,
 )
 from receipt.bootstrap.settings import Settings
+from receipt.infrastructure.assistant.langgraph_assistant import LangGraphRecipeAssistant
 from receipt.infrastructure.clock import SystemClock
 from receipt.infrastructure.imports.in_memory_jobs import InMemoryImportJobRepository
 from receipt.infrastructure.imports.langgraph_pipeline import LangGraphImportPipeline
@@ -79,6 +82,7 @@ HANDLERS: dict[type[Any], type[Any]] = {
     CreateImportJob: CreateImportJobHandler,
     ImportRecipe: ImportRecipeHandler,
     GetImportStatus: GetImportStatusHandler,
+    AskQuestion: AskQuestionHandler,
 }
 
 
@@ -136,6 +140,8 @@ def build_container(settings: Settings | None = None) -> punq.Container:
     container.register(ImportLimiter, instance=ImportLimiter(settings.import_concurrency))
     # Built on first use, so that adapters re-registered by tests are the ones it gets.
     container.register(RecipeImportPipeline, LangGraphImportPipeline, scope=punq.Scope.singleton)
+    # One instance: it holds the chats' memory.
+    container.register(RecipeAssistant, LangGraphRecipeAssistant, scope=punq.Scope.singleton)
 
     # Handlers are transient: a fresh instance per request.
     for handler_type in HANDLERS.values():
