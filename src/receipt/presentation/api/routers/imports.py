@@ -27,5 +27,6 @@ async def start_import(
 
 @router.get("/{job_id}", responses={404: {"model": ErrorResponse}})
 async def get_import(job_id: str, mediator: MediatorDep) -> ImportJobResponse:
-    """queued → reading → [transcribing] → extracting → saving → done | no_recipe | failed."""
+    """queued → reading → [transcribing] → extracting → [transcribing / watching → extracting]
+    → saving → done | no_recipe | failed."""
     return ImportJobResponse.of(await mediator.send(GetImportStatus(job_id=job_id)))

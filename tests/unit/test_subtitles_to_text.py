@@ -81,3 +81,9 @@ def test_a_line_of_only_a_number_is_taken_for_a_cue_index() -> None:
 def test_empty_input_gives_empty_text() -> None:
     assert subtitles_to_text("") == ""
     assert subtitles_to_text("WEBVTT\n\n") == ""
+
+
+def test_youtube_noise_markers_are_not_text() -> None:
+    raw = "WEBVTT\n\n00:00:00.960 --> 00:00:33.840\n[Music]\n\n00:00:42.000 --> 00:00:44.079\nforeign\n"
+
+    assert subtitles_to_text(raw) == ""

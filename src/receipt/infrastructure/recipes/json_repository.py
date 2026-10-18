@@ -122,6 +122,7 @@ def to_document(saved: SavedRecipe) -> dict[str, Any]:
             "description": text.description,
             "subtitles": text.subtitles,
             "transcript": text.transcript,
+            "frames": text.frames,
         },
     }
 

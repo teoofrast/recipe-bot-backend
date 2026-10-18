@@ -58,6 +58,10 @@ class TranscriptionError(ApplicationError):
     """Speech could not be turned into text: no API key, no credits, every model failed."""
 
 
+class FramesUnavailableError(ApplicationError):
+    """The video's frames could not be taken (ffmpeg failed or the video has no picture)."""
+
+
 class SubtitlesUnavailableError(ApplicationError):
     """A subtitle track is listed but could not be downloaded."""
 

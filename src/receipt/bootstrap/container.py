@@ -8,6 +8,7 @@ from receipt.application.behaviors import ErrorBehavior, LoggingBehavior
 from receipt.application.mediator import Mediator
 from receipt.application.ports.assistant import RecipeAssistant
 from receipt.application.ports.clock import Clock
+from receipt.application.ports.frame_describer import FrameDescriber
 from receipt.application.ports.import_jobs import ImportJobRepository
 from receipt.application.ports.import_pipeline import RecipeImportPipeline
 from receipt.application.ports.recipe_extractor import RecipeExtractor
@@ -43,6 +44,7 @@ from receipt.application.recipes.search import (
     SearchRecipesHandler,
 )
 from receipt.application.system.ping import Ping, PingHandler, PingStream, PingStreamHandler
+from receipt.application.video.get_video_frames import GetVideoFrames, GetVideoFramesHandler
 from receipt.application.video.get_video_info import GetVideoInfo, GetVideoInfoHandler
 from receipt.application.video.get_video_text import (
     GetVideoText,
@@ -65,6 +67,7 @@ from receipt.infrastructure.search.chroma_index import ChromaRecipeIndex
 from receipt.infrastructure.search.embeddings import OpenRouterEmbeddings
 from receipt.infrastructure.transcription.openrouter import OpenRouterTranscriber
 from receipt.infrastructure.video.yt_dlp_downloader import YtDlpVideoDownloader
+from receipt.infrastructure.vision.llm_frame_describer import LlmFrameDescriber
 
 HANDLERS: dict[type[Any], type[Any]] = {
     Ping: PingHandler,
@@ -72,6 +75,7 @@ HANDLERS: dict[type[Any], type[Any]] = {
     GetVideoInfo: GetVideoInfoHandler,
     GetVideoText: GetVideoTextHandler,
     GetVideoTranscript: GetVideoTranscriptHandler,
+    GetVideoFrames: GetVideoFramesHandler,
     ExtractRecipe: ExtractRecipeHandler,
     SaveRecipe: SaveRecipeHandler,
     GetRecipe: GetRecipeHandler,
@@ -115,14 +119,17 @@ def build_container(settings: Settings | None = None) -> punq.Container:
             models={
                 Purpose.EXTRACT: settings.llm_extract_models,
                 Purpose.CHAT: settings.llm_chat_models,
+                Purpose.VISION: settings.llm_vision_models,
             },
             timeout_seconds={
                 Purpose.EXTRACT: settings.llm_extract_timeout_seconds,
                 Purpose.CHAT: settings.llm_chat_timeout_seconds,
+                Purpose.VISION: settings.llm_vision_timeout_seconds,
             },
         ),
     )
     container.register(RecipeExtractor, LlmRecipeExtractor, scope=punq.Scope.singleton)
+    container.register(FrameDescriber, LlmFrameDescriber, scope=punq.Scope.singleton)
     # One instance: its lock is what keeps concurrent saves of one video from duplicating.
     container.register(
         RecipeRepository, instance=JsonFileRecipeRepository(settings.data_dir / "recipes")

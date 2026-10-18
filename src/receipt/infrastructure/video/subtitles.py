@@ -3,7 +3,8 @@ import re
 
 _TAG = re.compile(r"<[^>]*>")
 _HEADER_PREFIXES = ("WEBVTT", "Kind:", "Language:", "NOTE", "STYLE", "REGION")
-_NOISE = re.compile(r"^\[[^\]]*\]$")  # [Music], [Музыка], [♪♪♪]
+# [Music], [Музыка], [♪♪♪]; YouTube writes a bare "foreign" for speech it could not follow.
+_NOISE = re.compile(r"^(?:\[[^\]]*\]|foreign)$", re.IGNORECASE)
 
 
 def subtitles_to_text(raw: str) -> str:

@@ -14,6 +14,7 @@ from receipt.application.ports.video_downloader import SubtitleTrack
 from receipt.domain.video import Platform, UnsupportedUrlError
 from receipt.infrastructure.video.yt_dlp_downloader import (
     AUDIO_FORMAT,
+    VIDEO_FORMAT,
     YtDlpVideoDownloader,
     classify_download_error,
 )
@@ -217,6 +218,19 @@ async def test_download_audio_returns_downloaded_file(
     assert target.is_dir()
     assert fake_ytdl.calls[0]["format"] == AUDIO_FORMAT
     assert fake_ytdl.calls[0]["outtmpl"] == str(target / "%(id)s.%(ext)s")
+
+
+async def test_download_video_takes_a_small_copy(
+    fake_ytdl: type[FakeYoutubeDL], tmp_path: Path
+) -> None:
+    target = tmp_path / "video"
+    fake_ytdl.result = {**INFO, "requested_downloads": [{"filepath": str(target / "abc.mp4")}]}
+
+    path = await YtDlpVideoDownloader().download_video(YOUTUBE_URL, target)
+
+    assert path == target / "abc.mp4"
+    assert fake_ytdl.calls[0]["format"] == VIDEO_FORMAT
+    assert "height<=480" in VIDEO_FORMAT
 
 
 async def test_unsupported_link_fails_before_calling_yt_dlp(

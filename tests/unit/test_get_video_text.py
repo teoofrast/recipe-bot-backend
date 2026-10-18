@@ -17,12 +17,12 @@ async def test_text_with_subtitles_does_not_need_transcription(
 ) -> None:
     video_downloader.description = "Подписывайтесь!"
     video_downloader.subtitle_tracks = (RU_AUTO,)
-    video_downloader.subtitles = {"ru": "Берём свёклу и капусту"}
+    video_downloader.subtitles = {"ru": "Берём свёклу, капусту и варим борщ"}
 
     result = await mediator.send(GetVideoText(url=URL))
 
     assert result.subtitle_track == RU_AUTO
-    assert result.text.subtitles == "Берём свёклу и капусту"
+    assert result.text.subtitles == "Берём свёклу, капусту и варим борщ"
     assert result.text.title == "Борщ за 30 минут"
     assert not result.text.needs_transcription
 
@@ -70,7 +70,7 @@ def test_cli_video_text_prints_source_and_text(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     video_downloader.subtitle_tracks = (RU_AUTO,)
-    video_downloader.subtitles = {"ru": "Берём свёклу"}
+    video_downloader.subtitles = {"ru": "Берём свёклу, капусту и варим борщ"}
 
     main(["video-text", URL], mediator)
 

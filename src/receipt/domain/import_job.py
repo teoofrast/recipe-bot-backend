@@ -10,6 +10,7 @@ class ImportStatus(StrEnum):
     QUEUED = "queued"  # waiting for a free import slot
     READING = "reading"  # title, description, subtitles
     TRANSCRIBING = "transcribing"  # speech, when the text was not enough
+    WATCHING = "watching"  # frames, when the method is only shown, not told
     EXTRACTING = "extracting"  # the LLM reads the recipe out of the text
     SAVING = "saving"
     DONE = "done"  # the recipe is in the collection (new or saved before)

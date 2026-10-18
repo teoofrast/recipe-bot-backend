@@ -6,7 +6,12 @@ from receipt.application.recipes.extract_recipe import ExtractRecipe
 from receipt.domain.recipe import RecipeSource
 from receipt.domain.video import Platform
 from receipt.presentation.cli.app import main
-from tests.fakes import FakeRecipeExtractor, FakeTranscriber, FakeVideoDownloader
+from tests.fakes import (
+    FakeFrameDescriber,
+    FakeRecipeExtractor,
+    FakeTranscriber,
+    FakeVideoDownloader,
+)
 
 URL = "https://www.youtube.com/watch?v=abc123"
 RU_AUTO = SubtitleTrack(language="ru", url="https://subs/ru", ext="vtt", automatic=True)
@@ -20,13 +25,13 @@ async def test_recipe_from_subtitles_without_transcription(
 ) -> None:
     video_downloader.description = "Подписывайтесь!"
     video_downloader.subtitle_tracks = (RU_AUTO,)
-    video_downloader.subtitles = {"ru": "Берём свёклу и капусту"}
+    video_downloader.subtitles = {"ru": "Берём свёклу, капусту и варим борщ"}
 
     draft = await mediator.send(ExtractRecipe(url=URL))
 
     assert draft.recipe is not None
     assert draft.recipe.title == "Борщ"
-    assert draft.text.subtitles == "Берём свёклу и капусту"
+    assert draft.text.subtitles == "Берём свёклу, капусту и варим борщ"
     assert transcriber.calls == []
     [(_, source)] = recipe_extractor.calls
     assert source == RecipeSource(
@@ -54,7 +59,7 @@ async def test_the_method_from_the_speech_completes_the_caption(
     recipe_extractor: FakeRecipeExtractor,
 ) -> None:
     video_downloader.description = "Ингредиенты: свёкла 500 г, капуста 300 г, картофель 400 г"
-    recipe_extractor.method_only_in_speech = True
+    recipe_extractor.method_in = "speech"
 
     draft = await mediator.send(ExtractRecipe(url=URL))
 
@@ -62,6 +67,24 @@ async def test_the_method_from_the_speech_completes_the_caption(
     assert draft.recipe.steps == ("Нарежьте свёклу", "Сварите")
     assert len(transcriber.calls) == 1
     assert len(recipe_extractor.calls) == 2
+
+
+async def test_the_method_from_the_frames_completes_the_caption(
+    mediator: Mediator,
+    video_downloader: FakeVideoDownloader,
+    frame_describer: FakeFrameDescriber,
+    recipe_extractor: FakeRecipeExtractor,
+) -> None:
+    video_downloader.description = "Ингредиенты: свёкла 500 г, капуста 300 г, картофель 400 г"
+    recipe_extractor.method_in = "frames"
+    frame_describer.text = "Повар режет свёклу"
+
+    draft = await mediator.send(ExtractRecipe(url=URL))
+
+    assert draft.recipe is not None
+    assert draft.recipe.steps == ("Нарежьте свёклу", "Сварите")
+    assert draft.text.frames == "Повар режет свёклу"
+    assert len(recipe_extractor.calls) == 3  # caption, + speech, + frames
 
 
 async def test_no_recipe(

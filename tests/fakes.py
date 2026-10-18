@@ -8,6 +8,7 @@ from receipt.application.errors import (
     VideoUnavailableError,
     VideoUnavailableReason,
 )
+from receipt.application.ports.frame_describer import FramesDescription
 from receipt.application.ports.recipe_index import RecipeFilters, RecipeHit
 from receipt.application.ports.transcriber import Transcript
 from receipt.application.ports.video_downloader import SubtitleTrack, VideoMetadata
@@ -66,6 +67,13 @@ class FakeVideoDownloader:
         path.write_bytes(b"fake audio")
         return path
 
+    async def download_video(self, url: str, target_dir: Path) -> Path:
+        if self.error is not None:
+            raise self.error
+        path = target_dir / "abc123.mp4"
+        path.write_bytes(b"fake video")
+        return path
+
     async def fetch_subtitle_text(self, track: SubtitleTrack) -> str:
         if self.subtitles_error is not None:
             raise self.subtitles_error
@@ -88,19 +96,36 @@ class FakeTranscriber:
         return Transcript(text=self.text, model="fake/whisper")
 
 
+class FakeFrameDescriber:
+    """Remembers what it was given; answers with ``text`` or raises ``error``."""
+
+    def __init__(self) -> None:
+        self.text = "Повар что-то режет на доске"
+        self.error: Exception | None = None
+        self.calls: list[tuple[Path, bool]] = []
+
+    async def describe(self, video_path: Path) -> FramesDescription:
+        # Whether the file still exists at the moment it is looked at.
+        self.calls.append((video_path, video_path.exists()))
+        if self.error is not None:
+            raise self.error
+        return FramesDescription(text=self.text, model="fake/vision")
+
+
 class FakeRecipeExtractor:
     """Finds a recipe in any text that mentions "свёкл"; remembers what it was given."""
 
     def __init__(self) -> None:
         self.calls: list[tuple[SourceText, RecipeSource]] = []
-        # Like a caption that lists ingredients only: the method is in the voice-over.
-        self.method_only_in_speech = False
+        # Like a caption that lists ingredients only: the method is only in the voice-over
+        # ("speech") or only shown on the frames ("frames").
+        self.method_in: str | None = None
 
     async def extract(self, text: SourceText, source: RecipeSource) -> Recipe | None:
         self.calls.append((text, source))
         if "свёкл" not in text.combined().lower():
             return None
-        heard = text.transcript or not self.method_only_in_speech
+        heard = {None: True, "speech": text.transcript, "frames": text.frames}[self.method_in]
         return Recipe(
             title="Борщ",
             ingredients=(Ingredient("свёкла", 2, "шт"),),

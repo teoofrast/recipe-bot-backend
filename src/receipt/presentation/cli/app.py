@@ -28,6 +28,7 @@ from receipt.application.recipes.import_recipe import (
 )
 from receipt.application.recipes.search import ReindexRecipes, SearchRecipes
 from receipt.application.system.ping import Ping, PingStream
+from receipt.application.video.get_video_frames import GetVideoFrames
 from receipt.application.video.get_video_info import GetVideoInfo
 from receipt.application.video.get_video_text import GetVideoText
 from receipt.application.video.get_video_transcript import GetVideoTranscript
@@ -51,6 +52,8 @@ def build_parser() -> argparse.ArgumentParser:
     transcribe = commands.add_parser("transcribe", help="download the audio and transcribe speech")
     transcribe.add_argument("url")
     transcribe.add_argument("--language", help="ISO-639-1 hint, e.g. ru; detected if omitted")
+    frames = commands.add_parser("frames", help="download the video and describe its frames")
+    frames.add_argument("url")
     extract = commands.add_parser("extract", help="extract the recipe from a video (not saved)")
     extract.add_argument("url")
     extract.add_argument("--show-text", action="store_true", help="also print the source text")
@@ -97,6 +100,7 @@ STATUS_TEXT = {
     ImportStatus.QUEUED: "в очереди",
     ImportStatus.READING: "читаю описание и субтитры",
     ImportStatus.TRANSCRIBING: "распознаю речь",
+    ImportStatus.WATCHING: "смотрю видео",
     ImportStatus.EXTRACTING: "извлекаю рецепт",
     ImportStatus.SAVING: "сохраняю",
     ImportStatus.DONE: "готово",
@@ -182,6 +186,11 @@ async def run(args: argparse.Namespace, mediator: Mediator) -> None:
             print(f"Модель: {transcript.model}")
             print()
             print(transcript.text or "(речи нет)")
+        case "frames":
+            described = await mediator.send(GetVideoFrames(url=args.url))
+            print(f"Модель: {described.model}")
+            print()
+            print(described.text)
         case "extract":
             draft = await mediator.send(ExtractRecipe(url=args.url))
             used = [
@@ -190,6 +199,7 @@ async def run(args: argparse.Namespace, mediator: Mediator) -> None:
                     ("описание", draft.text.description),
                     ("субтитры", draft.text.subtitles),
                     ("распознанная речь", draft.text.transcript),
+                    ("кадры", draft.text.frames),
                 )
                 if value.strip()
             ]
