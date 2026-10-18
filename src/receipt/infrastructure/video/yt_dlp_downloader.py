@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import re
 from pathlib import Path
 from typing import Any
 
@@ -133,13 +134,22 @@ def _to_metadata(info: dict[str, Any], url: str, platform: Platform) -> VideoMet
         url=info.get("webpage_url") or url,
         platform=platform,
         video_id=str(info["id"]),
-        title=info.get("title") or "",
+        title=_real_title(info.get("title") or ""),
         description=info.get("description") or "",
         author=info.get("uploader") or info.get("channel") or info.get("creator"),
         duration_seconds=round(duration) if duration is not None else None,
         language=info.get("language"),
         subtitle_tracks=_subtitle_tracks(info),
     )
+
+
+# Instagram posts have no titles: yt-dlp makes up "Video by <account>", which is not the dish
+# and which the model would copy as the recipe title.
+_MADE_UP_TITLE = re.compile(r"(?:video|reel|post) by \S+", re.IGNORECASE)
+
+
+def _real_title(title: str) -> str:
+    return "" if _MADE_UP_TITLE.fullmatch(title.strip()) else title
 
 
 _TEXT_FORMATS = ("vtt", "srt")

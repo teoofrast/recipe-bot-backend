@@ -47,6 +47,23 @@ async def test_speech_is_transcribed_when_text_is_not_enough(
     assert language == "ru"  # the video's language is passed as a hint
 
 
+async def test_the_method_from_the_speech_completes_the_caption(
+    mediator: Mediator,
+    video_downloader: FakeVideoDownloader,
+    transcriber: FakeTranscriber,
+    recipe_extractor: FakeRecipeExtractor,
+) -> None:
+    video_downloader.description = "Ингредиенты: свёкла 500 г, капуста 300 г, картофель 400 г"
+    recipe_extractor.method_only_in_speech = True
+
+    draft = await mediator.send(ExtractRecipe(url=URL))
+
+    assert draft.recipe is not None
+    assert draft.recipe.steps == ("Нарежьте свёклу", "Сварите")
+    assert len(transcriber.calls) == 1
+    assert len(recipe_extractor.calls) == 2
+
+
 async def test_no_recipe(
     mediator: Mediator, video_downloader: FakeVideoDownloader, transcriber: FakeTranscriber
 ) -> None:
@@ -69,7 +86,7 @@ def test_cli_extract_prints_the_recipe(
     assert "Текст из: описание" in out
     assert "Борщ" in out
     assert "• свёкла — 2 шт" in out
-    assert "1. Сварите" in out
+    assert "1. Нарежьте свёклу" in out
     assert f"Источник: {URL} (youtube, chef)" in out
 
 

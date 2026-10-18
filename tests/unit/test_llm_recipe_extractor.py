@@ -14,6 +14,7 @@ from receipt.infrastructure.recipes.llm_extractor import (
     LlmRecipeExtractor,
     clean_tags,
     clean_title,
+    title_from_text,
     to_recipe,
 )
 
@@ -182,3 +183,27 @@ def test_hashtags_from_the_description_are_not_tags() -> None:
     tags = clean_tags(["сырникирецепт", "#назавтрак", "завтрак", "творог", "выпечка"], description)
 
     assert tags == ("завтрак", "выпечка")
+
+
+def test_a_missing_title_comes_from_the_text() -> None:
+    recipe = to_recipe(extracted(title=None), SOURCE, fallback_title="Говядина в масле")
+
+    assert recipe is not None
+    assert recipe.title == "Говядина в масле"
+
+
+@pytest.mark.parametrize(
+    ("title", "description", "expected"),
+    [
+        (
+            "",
+            "Говядина в масле, приготовленная с помощью простого приема.\n\nИнгредиенты",
+            "Говядина в масле",
+        ),
+        ("СЫРНИКИ // рецепт #shorts", "Описание", "Сырники"),
+        ("", "\n\n🔥 " + "очень " * 20, "🔥 " + ("очень " * 9).strip()),
+        ("", "", ""),
+    ],
+)
+def test_title_from_text(title: str, description: str, expected: str) -> None:
+    assert title_from_text(SourceText(title, description)) == expected

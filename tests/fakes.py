@@ -93,15 +93,18 @@ class FakeRecipeExtractor:
 
     def __init__(self) -> None:
         self.calls: list[tuple[SourceText, RecipeSource]] = []
+        # Like a caption that lists ingredients only: the method is in the voice-over.
+        self.method_only_in_speech = False
 
     async def extract(self, text: SourceText, source: RecipeSource) -> Recipe | None:
         self.calls.append((text, source))
         if "свёкл" not in text.combined().lower():
             return None
+        heard = text.transcript or not self.method_only_in_speech
         return Recipe(
             title="Борщ",
             ingredients=(Ingredient("свёкла", 2, "шт"),),
-            steps=("Сварите",),
+            steps=("Нарежьте свёклу", "Сварите") if heard else ("Сварите",),
             source=source,
         )
 

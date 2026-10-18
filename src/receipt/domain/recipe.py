@@ -122,3 +122,15 @@ class SavedRecipe:
     saved_at: datetime
     # Kept to re-extract the recipe later with a better prompt or model.
     source_text: SourceText
+
+
+# One step is a remark in the caption ("на водяную баню 20 мин"), not the method.
+MIN_STEPS = 2
+
+
+def speech_may_complete(text: SourceText, recipe: Recipe | None) -> bool:
+    """The caption gave no recipe or no method: the rest is likely spoken in the video.
+
+    Subtitles already are the speech; recognizing it again would add nothing.
+    """
+    return not text.has_subtitles and (recipe is None or len(recipe.steps) < MIN_STEPS)
