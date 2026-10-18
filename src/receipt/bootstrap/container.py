@@ -8,6 +8,7 @@ from receipt.application.behaviors import ErrorBehavior, LoggingBehavior
 from receipt.application.mediator import Mediator
 from receipt.application.ports.clock import Clock
 from receipt.application.ports.recipe_extractor import RecipeExtractor
+from receipt.application.ports.recipe_index import RecipeIndex
 from receipt.application.ports.recipe_repository import RecipeRepository
 from receipt.application.ports.transcriber import Transcriber
 from receipt.application.ports.video_downloader import SubtitleFetcher, VideoDownloader
@@ -22,6 +23,12 @@ from receipt.application.recipes.collection import (
     SaveRecipeHandler,
 )
 from receipt.application.recipes.extract_recipe import ExtractRecipe, ExtractRecipeHandler
+from receipt.application.recipes.search import (
+    ReindexRecipes,
+    ReindexRecipesHandler,
+    SearchRecipes,
+    SearchRecipesHandler,
+)
 from receipt.application.system.ping import Ping, PingHandler, PingStream, PingStreamHandler
 from receipt.application.video.get_video_info import GetVideoInfo, GetVideoInfoHandler
 from receipt.application.video.get_video_text import (
@@ -38,6 +45,8 @@ from receipt.infrastructure.clock import SystemClock
 from receipt.infrastructure.llm.provider import ChatModelProvider, Purpose
 from receipt.infrastructure.recipes.json_repository import JsonFileRecipeRepository
 from receipt.infrastructure.recipes.llm_extractor import LlmRecipeExtractor
+from receipt.infrastructure.search.chroma_index import ChromaRecipeIndex
+from receipt.infrastructure.search.embeddings import OpenRouterEmbeddings
 from receipt.infrastructure.transcription.openrouter import OpenRouterTranscriber
 from receipt.infrastructure.video.yt_dlp_downloader import YtDlpVideoDownloader
 
@@ -52,6 +61,8 @@ HANDLERS: dict[type[Any], type[Any]] = {
     GetRecipe: GetRecipeHandler,
     ListRecipes: ListRecipesHandler,
     DeleteRecipe: DeleteRecipeHandler,
+    SearchRecipes: SearchRecipesHandler,
+    ReindexRecipes: ReindexRecipesHandler,
 }
 
 
@@ -95,6 +106,15 @@ def build_container(settings: Settings | None = None) -> punq.Container:
     # One instance: its lock is what keeps concurrent saves of one video from duplicating.
     container.register(
         RecipeRepository, instance=JsonFileRecipeRepository(settings.data_dir / "recipes")
+    )
+    container.register(
+        RecipeIndex,
+        instance=ChromaRecipeIndex(
+            host=settings.chroma_host,
+            port=settings.chroma_port,
+            embeddings=OpenRouterEmbeddings(api_key=api_key, model=settings.embedding_model),
+            min_score=settings.search_min_score,
+        ),
     )
 
     # Handlers are transient: a fresh instance per request.

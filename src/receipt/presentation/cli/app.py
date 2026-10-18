@@ -5,6 +5,7 @@ from collections.abc import Sequence
 
 from receipt.application.errors import ApplicationError, VideoUnavailableError
 from receipt.application.mediator import Mediator
+from receipt.application.ports.recipe_index import RecipeFilters
 from receipt.application.recipes.collection import (
     DeleteRecipe,
     GetRecipe,
@@ -12,6 +13,7 @@ from receipt.application.recipes.collection import (
     SaveRecipe,
 )
 from receipt.application.recipes.extract_recipe import ExtractRecipe
+from receipt.application.recipes.search import ReindexRecipes, SearchRecipes
 from receipt.application.system.ping import Ping, PingStream
 from receipt.application.video.get_video_info import GetVideoInfo
 from receipt.application.video.get_video_text import GetVideoText
@@ -44,6 +46,13 @@ def build_parser() -> argparse.ArgumentParser:
     show.add_argument("recipe_id")
     delete = commands.add_parser("delete", help="delete a saved recipe")
     delete.add_argument("recipe_id")
+    search = commands.add_parser("search", help="find saved recipes by meaning")
+    search.add_argument("text")
+    search.add_argument("--max-minutes", type=int, help="only recipes known to take at most N")
+    search.add_argument("--tag", action="append", default=[], help="required tag (repeatable)")
+    search.add_argument("--cuisine")
+    search.add_argument("--limit", type=int, default=5)
+    commands.add_parser("reindex", help="rebuild the search index from the saved recipes")
     return parser
 
 
@@ -147,6 +156,20 @@ async def run(args: argparse.Namespace, mediator: Mediator) -> None:
         case "delete":
             await mediator.send(DeleteRecipe(recipe_id=args.recipe_id))
             print(f"Удалён: {args.recipe_id}")
+        case "search":
+            filters = RecipeFilters(
+                max_minutes=args.max_minutes, cuisine=args.cuisine, tags=tuple(args.tag)
+            )
+            found = await mediator.send(
+                SearchRecipes(text=args.text, filters=filters, limit=args.limit)
+            )
+            for item in found:
+                print(f"{item.score:.2f}  {item.saved.id}  {item.saved.recipe.title}")
+            if not found:
+                print("Ничего не найдено.")
+        case "reindex":
+            count = await mediator.send(ReindexRecipes())
+            print(f"Проиндексировано рецептов: {count}")
 
 
 def main(argv: Sequence[str], mediator: Mediator) -> None:

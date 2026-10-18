@@ -1,7 +1,9 @@
+from collections.abc import Sequence
 from datetime import datetime
 from pathlib import Path
 
 from receipt.application.errors import DuplicateRecipeError
+from receipt.application.ports.recipe_index import RecipeFilters, RecipeHit
 from receipt.application.ports.transcriber import Transcript
 from receipt.application.ports.video_downloader import SubtitleTrack, VideoMetadata
 from receipt.domain.recipe import Ingredient, Recipe, RecipeSource, SavedRecipe
@@ -119,3 +121,51 @@ class InMemoryRecipeRepository:
 
     async def delete(self, recipe_id: str) -> bool:
         return self.recipes.pop(recipe_id, None) is not None
+
+
+class FakeRecipeIndex:
+    """Search by shared words instead of meaning; ``error`` makes every call fail."""
+
+    def __init__(self) -> None:
+        self.documents: dict[str, SavedRecipe] = {}
+        self.error: Exception | None = None
+        self.cleared = 0
+
+    async def index(self, saved: SavedRecipe) -> None:
+        self._fail()
+        self.documents[saved.id] = saved
+
+    async def index_many(self, recipes: Sequence[SavedRecipe]) -> None:
+        for saved in recipes:
+            await self.index(saved)
+
+    async def remove(self, recipe_id: str) -> None:
+        self._fail()
+        self.documents.pop(recipe_id, None)
+
+    async def clear(self) -> None:
+        self._fail()
+        self.cleared += 1
+        self.documents.clear()
+
+    async def search(self, text: str, filters: RecipeFilters, limit: int) -> list[RecipeHit]:
+        self._fail()
+        words = set(text.lower().split())
+        hits = []
+        for recipe_id, saved in self.documents.items():
+            recipe = saved.recipe
+            if filters.max_minutes is not None and (
+                recipe.total_minutes is None or recipe.total_minutes > filters.max_minutes
+            ):
+                continue
+            if not set(filters.tags) <= set(recipe.tags):
+                continue
+            content = " ".join([recipe.title, *(item.name for item in recipe.ingredients)])
+            shared = words & set(content.lower().split())
+            if shared:
+                hits.append(RecipeHit(recipe_id, score=len(shared) / len(words)))
+        return sorted(hits, key=lambda hit: -hit.score)[:limit]
+
+    def _fail(self) -> None:
+        if self.error is not None:
+            raise self.error

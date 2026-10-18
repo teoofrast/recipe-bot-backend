@@ -2,6 +2,10 @@ services:
   api:
     build: .
     env_file: .env
+    # Inside the compose network Chroma is "chroma:8000", whatever .env says for local runs.
+    environment:
+      CHROMA_HOST: chroma
+      CHROMA_PORT: "8000"
     ports:
       - "8000:8000"
     volumes:
@@ -27,6 +31,9 @@ services:
     build: .
     command: ["python", "-m", "receipt.presentation.bot"]
     env_file: .env
+    environment:
+      CHROMA_HOST: chroma
+      CHROMA_PORT: "8000"
     profiles: ["bot"]
     depends_on:
       api:
@@ -34,6 +41,9 @@ services:
 
   chroma:
     image: chromadb/chroma:1.5.9
+    # 8001 on the host: the app can also run outside Docker (uv run) against the same index.
+    ports:
+      - "8001:8000"
     volumes:
       - chroma-data:/data
 
