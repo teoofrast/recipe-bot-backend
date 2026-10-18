@@ -5,11 +5,13 @@ from collections.abc import Sequence
 
 from receipt.application.errors import ApplicationError, VideoUnavailableError
 from receipt.application.mediator import Mediator
+from receipt.application.recipes.extract_recipe import ExtractRecipe
 from receipt.application.system.ping import Ping, PingStream
 from receipt.application.video.get_video_info import GetVideoInfo
 from receipt.application.video.get_video_text import GetVideoText
 from receipt.application.video.get_video_transcript import GetVideoTranscript
 from receipt.domain.errors import DomainError
+from receipt.domain.recipe import Recipe
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -27,7 +29,37 @@ def build_parser() -> argparse.ArgumentParser:
     transcribe = commands.add_parser("transcribe", help="download the audio and transcribe speech")
     transcribe.add_argument("url")
     transcribe.add_argument("--language", help="ISO-639-1 hint, e.g. ru; detected if omitted")
+    extract = commands.add_parser("extract", help="extract the recipe from a video (not saved)")
+    extract.add_argument("url")
+    extract.add_argument("--show-text", action="store_true", help="also print the source text")
     return parser
+
+
+def format_recipe(recipe: Recipe) -> str:
+    lines = [recipe.title]
+    facts = [
+        f"порций: {recipe.servings}" if recipe.servings else "",
+        f"время: {recipe.total_minutes} мин" if recipe.total_minutes else "",
+        f"кухня: {recipe.cuisine}" if recipe.cuisine else "",
+        f"теги: {', '.join(recipe.tags)}" if recipe.tags else "",
+    ]
+    if any(facts):
+        lines.append(" · ".join(fact for fact in facts if fact))
+    lines.append("")
+    lines.append("Ингредиенты:")
+    for item in recipe.ingredients:
+        amount = f"{item.amount:g}" if item.amount is not None else ""
+        quantity = " ".join(part for part in (amount, item.unit or "") if part)
+        details = ", ".join(part for part in (quantity, item.note or "") if part)
+        lines.append(f"  • {item.name}" + (f" — {details}" if details else ""))
+    if recipe.steps:
+        lines.append("")
+        lines.append("Шаги:")
+        lines.extend(f"  {number}. {step}" for number, step in enumerate(recipe.steps, 1))
+    lines.append("")
+    author = f", {recipe.source.author}" if recipe.source.author else ""
+    lines.append(f"Источник: {recipe.source.url} ({recipe.source.platform}{author})")
+    return "\n".join(lines)
 
 
 async def run(args: argparse.Namespace, mediator: Mediator) -> None:
@@ -66,6 +98,22 @@ async def run(args: argparse.Namespace, mediator: Mediator) -> None:
             print(f"Модель: {transcript.model}")
             print()
             print(transcript.text or "(речи нет)")
+        case "extract":
+            draft = await mediator.send(ExtractRecipe(url=args.url))
+            used = [
+                name
+                for name, value in (
+                    ("описание", draft.text.description),
+                    ("субтитры", draft.text.subtitles),
+                    ("распознанная речь", draft.text.transcript),
+                )
+                if value.strip()
+            ]
+            print(f"Текст из: {', '.join(used) or 'только название'}")
+            print()
+            print(format_recipe(draft.recipe) if draft.recipe else "Рецепта в видео нет.")
+            if args.show_text:
+                print("\n--- Исходный текст ---\n" + draft.text.combined())
 
 
 def main(argv: Sequence[str], mediator: Mediator) -> None:

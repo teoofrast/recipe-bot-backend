@@ -3,6 +3,8 @@ from pathlib import Path
 
 from receipt.application.ports.transcriber import Transcript
 from receipt.application.ports.video_downloader import SubtitleTrack, VideoMetadata
+from receipt.domain.recipe import Ingredient, Recipe, RecipeSource
+from receipt.domain.source_text import SourceText
 from receipt.domain.video import detect_platform
 
 
@@ -71,3 +73,21 @@ class FakeTranscriber:
         if self.error is not None:
             raise self.error
         return Transcript(text=self.text, model="fake/whisper")
+
+
+class FakeRecipeExtractor:
+    """Finds a recipe in any text that mentions "свёкл"; remembers what it was given."""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[SourceText, RecipeSource]] = []
+
+    async def extract(self, text: SourceText, source: RecipeSource) -> Recipe | None:
+        self.calls.append((text, source))
+        if "свёкл" not in text.combined().lower():
+            return None
+        return Recipe(
+            title="Борщ",
+            ingredients=(Ingredient("свёкла", 2, "шт"),),
+            steps=("Сварите",),
+            source=source,
+        )

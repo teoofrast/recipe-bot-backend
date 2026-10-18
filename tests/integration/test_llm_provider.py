@@ -54,7 +54,10 @@ def provider() -> ChatModelProvider:
             Purpose.EXTRACT: [MISSING_MODEL, *SETTINGS.llm_extract_models],
             Purpose.CHAT: [MISSING_MODEL, *SETTINGS.llm_chat_models],
         },
-        timeout_seconds=SETTINGS.llm_timeout_seconds,
+        timeout_seconds={
+            Purpose.EXTRACT: SETTINGS.llm_extract_timeout_seconds,
+            Purpose.CHAT: SETTINGS.llm_chat_timeout_seconds,
+        },
     )
 
 

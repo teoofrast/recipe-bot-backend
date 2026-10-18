@@ -39,8 +39,11 @@ class Settings(BaseSettings):
         "poolside/laguna-s-2.1:free",
         "google/gemma-4-31b-it:free",
     ]
-    # Hard limit per model call; then the next model is tried.
-    llm_timeout_seconds: float = 40
+    # Hard limit per model call, then the next model is tried. Free models write a recipe's
+    # JSON slowly (60-70 s for 20 ingredients), and the import runs in the background; a chat
+    # answer is awaited by a person.
+    llm_extract_timeout_seconds: float = 120
+    llm_chat_timeout_seconds: float = 40
 
     @field_validator(
         "subtitle_languages", "stt_models", "llm_extract_models", "llm_chat_models", mode="before"

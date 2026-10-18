@@ -73,7 +73,7 @@ def provider(*models: ScriptedModel, api_key: str | None = "sk-test", timeout: f
         api_key=api_key,
         models={Purpose.EXTRACT: list(by_id), Purpose.CHAT: []},
         timeout_seconds=timeout,
-        model_factory=by_id.__getitem__,  # type: ignore[arg-type]
+        model_factory=lambda model_id, timeout: by_id[model_id],  # type: ignore[arg-type,return-value]
     )
 
 
@@ -229,3 +229,25 @@ def test_logger_shows_a_streamed_model_name_once(caplog: pytest.LogCaptureFixtur
     )
 
     assert caplog.messages == ["LLM vendor/m:free answered (served by vendor/m:free)"]
+
+
+async def test_each_purpose_has_its_own_deadline() -> None:
+    slow = ScriptedModel("slow", delay=0.2)
+    by_id = {"slow": slow}
+    timeouts: list[float] = []
+
+    def factory(model_id: str, timeout: float) -> Any:
+        timeouts.append(timeout)
+        return by_id[model_id]
+
+    llm = ChatModelProvider(
+        api_key="sk-test",
+        models={Purpose.EXTRACT: ["slow"], Purpose.CHAT: ["slow"]},
+        timeout_seconds={Purpose.EXTRACT: 5, Purpose.CHAT: 0.05},
+        model_factory=factory,
+    )
+
+    assert await llm.with_fallbacks(Purpose.EXTRACT).ainvoke("hi") == "answer from slow"
+    with pytest.raises(TimeoutError):
+        await llm.with_fallbacks(Purpose.CHAT).ainvoke("hi")
+    assert timeouts == [5, 0.05]

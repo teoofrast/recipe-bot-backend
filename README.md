@@ -63,6 +63,7 @@ docker compose run --rm api receipt ping-stream --count 3
 docker compose run --rm api receipt video-info "https://youtu.be/jNQXAC9IVRw"
 docker compose run --rm api receipt video-text "https://youtu.be/jNQXAC9IVRw"  # название, описание, субтитры
 docker compose run --rm api receipt transcribe "https://youtu.be/jNQXAC9IVRw"  # речь из аудио через OpenRouter
+docker compose run --rm api receipt extract "https://www.youtube.com/watch?v=QPy2sA8HC5U"  # рецепт (без сохранения)
 ```
 
 ## Распознавание речи
@@ -93,8 +94,9 @@ ffmpeg оставляет от видео только речь: mono, 16 кГц
 
 - Переход к следующей модели: таймаут, 429 (общие лимиты бесплатных моделей срабатывают часто),
   5xx, модель удалена или не поддерживает запрос, невалидный JSON.
-- У каждой модели жёсткий дедлайн `LLM_TIMEOUT_SECONDS` (40 с): OpenRouter держит соединение,
-  пока модель думает, и обычный таймаут HTTP не срабатывает — бесплатные модели отвечали по 2–3 минуты.
+- У каждой модели жёсткий дедлайн: OpenRouter держит соединение, пока модель думает, и обычный
+  таймаут HTTP не срабатывает. Извлечение — `LLM_EXTRACT_TIMEOUT_SECONDS` (120 с: бесплатные модели
+  пишут JSON рецепта на 20 ингредиентов 60–70 с, импорт идёт в фоне), чат — `LLM_CHAT_TIMEOUT_SECONDS` (40 с).
 - Стриминг: переход возможен только до первого чанка; сбой посреди ответа — ошибка.
 - Неверный ключ (401) или пустой баланс (402) — сразу понятная ошибка, без перебора.
 - В логах видно, какая модель упала и какая ответила.
