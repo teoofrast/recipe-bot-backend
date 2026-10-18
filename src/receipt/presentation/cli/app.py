@@ -5,7 +5,15 @@ from collections.abc import Sequence
 
 from receipt.application.errors import ApplicationError, VideoUnavailableError
 from receipt.application.mediator import Mediator
+from receipt.application.ports.assistant import (
+    DoneEvent,
+    ErrorEvent,
+    SourcesEvent,
+    TokenEvent,
+    ToolEvent,
+)
 from receipt.application.ports.recipe_index import RecipeFilters
+from receipt.application.recipes.ask import AskQuestion
 from receipt.application.recipes.collection import (
     DeleteRecipe,
     GetRecipe,
@@ -61,7 +69,28 @@ def build_parser() -> argparse.ArgumentParser:
     commands.add_parser("reindex", help="rebuild the search index from the saved recipes")
     import_ = commands.add_parser("import", help="import a recipe from a video: extract and save")
     import_.add_argument("url")
+    ask = commands.add_parser("ask", help="ask the assistant about the saved recipes")
+    ask.add_argument("text")
+    commands.add_parser("chat", help="talk to the assistant; it remembers the conversation")
     return parser
+
+
+async def print_answer(mediator: Mediator, chat_id: str, text: str) -> None:
+    """Prints the answer as it streams in: tokens, lookups, sources."""
+    async for event in mediator.stream(AskQuestion(chat_id=chat_id, text=text)):
+        match event:
+            case TokenEvent(text=piece):
+                print(piece, end="", flush=True)
+            case ToolEvent(description=description):
+                print(f"\n… {description}", flush=True)
+            case SourcesEvent(recipes=recipes):
+                print("\n\nИсточники:")
+                for source in recipes:
+                    print(f"  • {source.title} ({source.recipe_id}) — {source.url}")
+            case ErrorEvent(message=message):
+                print(f"\nОшибка: {message}", file=sys.stderr)
+            case DoneEvent():
+                print()
 
 
 STATUS_TEXT = {
@@ -217,6 +246,12 @@ async def run(args: argparse.Namespace, mediator: Mediator) -> None:
             else:
                 print(f"\nОшибка: {job.error}", file=sys.stderr)
                 raise SystemExit(1)
+        case "ask":
+            await print_answer(mediator, "cli", args.text)
+        case "chat":
+            print("Вопросы о ваших рецептах. Пустая строка — выход.")
+            while question := (await asyncio.to_thread(input, "\n> ")).strip():
+                await print_answer(mediator, "cli-chat", question)
 
 
 def main(argv: Sequence[str], mediator: Mediator) -> None:
