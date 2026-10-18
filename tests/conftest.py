@@ -6,6 +6,7 @@ import pytest
 from receipt.application.mediator import Mediator
 from receipt.application.ports.assistant import RecipeAssistant
 from receipt.application.ports.clock import Clock
+from receipt.application.ports.frame_describer import FrameDescriber
 from receipt.application.ports.recipe_extractor import RecipeExtractor
 from receipt.application.ports.recipe_index import RecipeIndex
 from receipt.application.ports.recipe_repository import RecipeRepository
@@ -16,6 +17,7 @@ from receipt.bootstrap.settings import Settings
 from tests.fakes import (
     FakeAssistant,
     FakeClock,
+    FakeFrameDescriber,
     FakeRecipeExtractor,
     FakeRecipeIndex,
     FakeTranscriber,
@@ -34,6 +36,11 @@ def video_downloader() -> FakeVideoDownloader:
 @pytest.fixture
 def transcriber() -> FakeTranscriber:
     return FakeTranscriber()
+
+
+@pytest.fixture
+def frame_describer() -> FakeFrameDescriber:
+    return FakeFrameDescriber()
 
 
 @pytest.fixture
@@ -60,6 +67,7 @@ def assistant() -> FakeAssistant:
 def container(
     video_downloader: FakeVideoDownloader,
     transcriber: FakeTranscriber,
+    frame_describer: FakeFrameDescriber,
     recipe_extractor: FakeRecipeExtractor,
     recipe_repository: InMemoryRecipeRepository,
     recipe_index: FakeRecipeIndex,
@@ -71,6 +79,7 @@ def container(
     container.register(VideoDownloader, instance=video_downloader)
     container.register(SubtitleFetcher, instance=video_downloader)
     container.register(Transcriber, instance=transcriber)
+    container.register(FrameDescriber, instance=frame_describer)
     container.register(RecipeExtractor, instance=recipe_extractor)
     container.register(RecipeRepository, instance=recipe_repository)
     container.register(RecipeIndex, instance=recipe_index)

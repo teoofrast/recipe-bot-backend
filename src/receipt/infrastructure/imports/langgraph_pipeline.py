@@ -1,5 +1,6 @@
 """The import as a LangGraph graph: each step is a node, the flow and retries are edges."""
 
+import logging
 from dataclasses import replace
 from typing import Any, TypedDict
 
@@ -8,6 +9,7 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.types import RetryPolicy
 
 from receipt.application.errors import (
+    ApplicationError,
     LlmUnavailableError,
     VideoUnavailableError,
     VideoUnavailableReason,
@@ -18,12 +20,21 @@ from receipt.application.ports.recipe_extractor import RecipeExtractor
 from receipt.application.ports.recipe_repository import RecipeRepository
 from receipt.application.ports.video_downloader import VideoMetadata
 from receipt.application.recipes.collection import SaveRecipe
+from receipt.application.video.get_video_frames import GetVideoFrames
 from receipt.application.video.get_video_text import GetVideoText
 from receipt.application.video.get_video_transcript import GetVideoTranscript
 from receipt.application.video.subtitles import language_base
 from receipt.domain.import_job import ImportStatus
-from receipt.domain.recipe import Recipe, RecipeSource, speech_may_complete
+from receipt.domain.recipe import (
+    Recipe,
+    RecipeSource,
+    fuller,
+    lacks_method,
+    speech_may_complete,
+)
 from receipt.domain.source_text import SourceText
+
+logger = logging.getLogger(__name__)
 
 
 class ImportState(TypedDict, total=False):
@@ -33,6 +44,8 @@ class ImportState(TypedDict, total=False):
     recipe: Recipe | None
     # The speech was recognized (even if the video turned out silent): not again.
     transcribed: bool
+    # The frames were looked at (or could not be): not again.
+    watched: bool
     outcome: ImportOutcome
 
 
@@ -54,16 +67,9 @@ def source_of(video: VideoMetadata) -> RecipeSource:
     )
 
 
-def fuller(before: Recipe | None, after: Recipe | None) -> Recipe | None:
-    """After the speech, the model may still miss the method (free models vary from run to run):
-    the caption's recipe is kept unless the new one has more steps."""
-    if before is None or (after is not None and len(after.steps) >= len(before.steps)):
-        return after or before
-    return before
-
-
 class LangGraphImportPipeline:
-    """read_video → check_saved → [transcribe] → extract → [transcribe → extract] → save.
+    """read_video → check_saved → [transcribe] → extract → [transcribe → extract]
+    → [watch → extract] → save.
 
     Steps reuse the application's own use cases through the mediator (so they are logged and
     behave as everywhere else); the graph adds the order, the branches and the retries.
@@ -91,6 +97,7 @@ class LangGraphImportPipeline:
         graph.add_node("read_video", self._read_video, retry_policy=NETWORK_RETRY)
         graph.add_node("check_saved", self._check_saved)
         graph.add_node("transcribe", self._transcribe, retry_policy=NETWORK_RETRY)
+        graph.add_node("watch", self._watch)
         graph.add_node("extract", self._extract, retry_policy=LLM_RETRY)
         graph.add_node("save", self._save)
         graph.add_node("no_recipe", self._no_recipe)
@@ -106,8 +113,14 @@ class LangGraphImportPipeline:
         graph.add_conditional_edges(
             "extract",
             self._after_extract,
-            {"transcribe": "transcribe", "no_recipe": "no_recipe", "save": "save"},
+            {
+                "transcribe": "transcribe",
+                "watch": "watch",
+                "no_recipe": "no_recipe",
+                "save": "save",
+            },
         )
+        graph.add_edge("watch", "extract")
         graph.add_edge("save", END)
         graph.add_edge("no_recipe", END)
         return graph.compile()
@@ -132,6 +145,16 @@ class LangGraphImportPipeline:
         language = language_base(video.language) if video.language else None
         transcript = await self._mediator.send(GetVideoTranscript(url=video.url, language=language))
         return {"text": replace(state["text"], transcript=transcript.text), "transcribed": True}
+
+    async def _watch(self, state: ImportState, config: RunnableConfig) -> ImportState:
+        await _stage(config, ImportStatus.WATCHING)
+        try:
+            frames = await self._mediator.send(GetVideoFrames(url=state["video"].url))
+        except ApplicationError as error:
+            # A last resort: without the frames the recipe is saved as it is.
+            logger.warning("Frames of %s were not described: %s", state["video"].url, error)
+            return {"watched": True}
+        return {"text": replace(state["text"], frames=frames.text), "watched": True}
 
     async def _extract(self, state: ImportState, config: RunnableConfig) -> ImportState:
         await _stage(config, ImportStatus.EXTRACTING)
@@ -161,9 +184,12 @@ class LangGraphImportPipeline:
     @staticmethod
     def _after_extract(state: ImportState) -> str:
         recipe = state.get("recipe")
-        # The caption listed ingredients only: the method is in the voice-over.
+        # The caption listed ingredients only: the method is in the voice-over...
         if not state.get("transcribed") and speech_may_complete(state["text"], recipe):
             return "transcribe"
+        # ...or only shown.
+        if not state.get("watched") and lacks_method(recipe):
+            return "watch"
         return "save" if recipe is not None else "no_recipe"
 
 

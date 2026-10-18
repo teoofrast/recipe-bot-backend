@@ -13,6 +13,17 @@ _QUANTITY = re.compile(
 
 # Three quantities in a row is already an ingredient list, not a random number in a caption.
 MIN_QUANTITIES = 3
+# Fewer words is the platform's noise ("foreign" for music), not speech that holds a recipe.
+MIN_SUBTITLE_WORDS = 5
+
+
+# "0:17 Making the pancakes", "1:02:03 - Соус": YouTube chapters. Models turn them into steps
+# ("Приготовьте блины"), which hides that the method itself is missing.
+_CHAPTER = re.compile(r"^[^\w\n]*\d{1,2}:\d{2}(?::\d{2})?\b.*$\n?", re.MULTILINE)
+
+
+def without_chapters(text: str) -> str:
+    return _CHAPTER.sub("", text)
 
 
 def looks_like_ingredient_list(text: str) -> bool:
@@ -28,10 +39,12 @@ class SourceText:
     subtitles: str = ""
     # Speech recognized from the audio, when subtitles and description were not enough.
     transcript: str = ""
+    # What a vision model saw on the video's frames: on-screen text and the cook's actions.
+    frames: str = ""
 
     @property
     def has_subtitles(self) -> bool:
-        return bool(self.subtitles.strip())
+        return len(self.subtitles.split()) >= MIN_SUBTITLE_WORDS
 
     @property
     def needs_transcription(self) -> bool:
@@ -41,9 +54,10 @@ class SourceText:
     def combined(self) -> str:
         sections = (
             ("Название", self.title),
-            ("Описание", self.description),
+            ("Описание", without_chapters(self.description)),
             ("Субтитры", self.subtitles),
             ("Речь из видео (распознана автоматически)", self.transcript),
+            ("Что видно на кадрах видео (описано автоматически)", self.frames),
         )
         return "\n\n".join(
             f"{label}:\n{value.strip()}" for label, value in sections if value.strip()

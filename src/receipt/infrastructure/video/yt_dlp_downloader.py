@@ -38,6 +38,8 @@ class _YtDlpLogger:
 # such tracks are skipped for a small video file with ordinary AAC ("?" also lets through
 # formats whose codec is unknown). TikTok and Instagram may have no audio-only track at all.
 AUDIO_FORMAT = "bestaudio[acodec!=?mp4a.40.42]/worst[acodec!=?mp4a.40.42]/best"
+# Frames go to a vision model as 480 px tiles: more pixels are only a bigger download.
+VIDEO_FORMAT = "bv*[height<=480]/b[height<=480]/wv*/w"
 
 _BASE_OPTIONS: dict[str, Any] = {
     "quiet": True,
@@ -91,6 +93,16 @@ class YtDlpVideoDownloader:
         await asyncio.to_thread(target_dir.mkdir, parents=True, exist_ok=True)
         options = {
             "format": AUDIO_FORMAT,
+            "outtmpl": str(target_dir / "%(id)s.%(ext)s"),
+        }
+        info = await asyncio.to_thread(self._extract, url, options, True)
+        return Path(info["requested_downloads"][0]["filepath"])
+
+    async def download_video(self, url: str, target_dir: Path) -> Path:
+        detect_platform(url)
+        await asyncio.to_thread(target_dir.mkdir, parents=True, exist_ok=True)
+        options = {
+            "format": VIDEO_FORMAT,
             "outtmpl": str(target_dir / "%(id)s.%(ext)s"),
         }
         info = await asyncio.to_thread(self._extract, url, options, True)

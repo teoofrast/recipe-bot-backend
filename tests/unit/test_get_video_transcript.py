@@ -53,3 +53,13 @@ def test_cli_transcribe_shows_when_there_is_no_speech(
     main(["transcribe", URL], mediator)
 
     assert "(речи нет)" in capsys.readouterr().out
+
+
+def test_cli_frames_prints_model_and_description(
+    mediator: Mediator, capsys: pytest.CaptureFixture[str]
+) -> None:
+    main(["frames", URL], mediator)
+
+    out = capsys.readouterr().out
+    assert "Модель: fake/vision" in out
+    assert "Повар что-то режет на доске" in out

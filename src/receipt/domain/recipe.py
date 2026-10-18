@@ -128,9 +128,25 @@ class SavedRecipe:
 MIN_STEPS = 2
 
 
+def lacks_method(recipe: Recipe | None) -> bool:
+    """No recipe, or ingredients without the way to cook them."""
+    return recipe is None or len(recipe.steps) < MIN_STEPS
+
+
 def speech_may_complete(text: SourceText, recipe: Recipe | None) -> bool:
     """The caption gave no recipe or no method: the rest is likely spoken in the video.
 
     Subtitles already are the speech; recognizing it again would add nothing.
     """
-    return not text.has_subtitles and (recipe is None or len(recipe.steps) < MIN_STEPS)
+    return not text.has_subtitles and lacks_method(recipe)
+
+
+def fuller(before: Recipe | None, after: Recipe | None) -> Recipe | None:
+    """Of two extractions of one video, the one with the method.
+
+    Another look (speech, frames) may still miss the steps: free models vary from run to run.
+    The earlier recipe is kept unless the new one has at least as many steps.
+    """
+    if before is None or (after is not None and len(after.steps) >= len(before.steps)):
+        return after or before
+    return before

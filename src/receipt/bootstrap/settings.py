@@ -47,11 +47,18 @@ class Settings(BaseSettings):
         "poolside/laguna-s-2.1:free",
         "google/gemma-4-31b-it:free",
     ]
+    # Models that see images, for videos whose method is only shown: probed on frames of a
+    # pancake short, nemotron-vl told the steps in ~90 s.
+    llm_vision_models: CommaList = [
+        "nvidia/nemotron-3.5-super-vl:free",
+        "google/gemma-4-31b-it:free",
+    ]
     # Hard limit per model call, then the next model is tried. Free models write a recipe's
     # JSON slowly (60-70 s for 20 ingredients), and the import runs in the background; a chat
     # answer is awaited by a person.
     llm_extract_timeout_seconds: float = 120
     llm_chat_timeout_seconds: float = 40
+    llm_vision_timeout_seconds: float = 150
 
     # Search index. Local runs reach the compose service on the host port; inside compose
     # docker-compose.yml sets chroma:8000.
@@ -64,7 +71,12 @@ class Settings(BaseSettings):
     search_min_score: float = 0.78
 
     @field_validator(
-        "subtitle_languages", "stt_models", "llm_extract_models", "llm_chat_models", mode="before"
+        "subtitle_languages",
+        "stt_models",
+        "llm_extract_models",
+        "llm_chat_models",
+        "llm_vision_models",
+        mode="before",
     )
     @classmethod
     def _split_commas(cls, value: object, info: ValidationInfo) -> object:

@@ -46,6 +46,7 @@ FALLBACK_ERRORS: tuple[type[BaseException], ...] = (
 class Purpose(StrEnum):
     EXTRACT = "extract"  # needs structured output (JSON by schema)
     CHAT = "chat"  # needs tool calling and streaming
+    VISION = "vision"  # needs images in the input
 
 
 class _ModelLogger(BaseCallbackHandler):

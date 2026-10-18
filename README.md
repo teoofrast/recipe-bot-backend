@@ -64,6 +64,7 @@ docker compose run --rm api receipt ping-stream --count 3
 docker compose run --rm api receipt video-info "https://youtu.be/jNQXAC9IVRw"
 docker compose run --rm api receipt video-text "https://youtu.be/jNQXAC9IVRw"  # название, описание, субтитры
 docker compose run --rm api receipt transcribe "https://youtu.be/jNQXAC9IVRw"  # речь из аудио через OpenRouter
+docker compose run --rm api receipt frames "https://www.youtube.com/watch?v=_VR8BYxLhbQ"  # что видно на кадрах
 docker compose run --rm api receipt extract "https://www.youtube.com/watch?v=QPy2sA8HC5U"  # рецепт (без сохранения)
 docker compose run --rm api receipt extract "https://www.youtube.com/watch?v=QPy2sA8HC5U" --save
 docker compose run --rm api receipt import "https://www.youtube.com/watch?v=QPy2sA8HC5U"  # полный импорт со статусами
@@ -90,6 +91,8 @@ graph TD;
 	check_saved -. текста хватает .-> extract;
 	transcribe --> extract;
 	extract -. нет шагов, речь не слушали .-> transcribe;
+	extract -. всё ещё нет шагов .-> watch;
+	watch --> extract;
 	extract -. рецепта нет .-> no_recipe;
 	extract --> save;
 	no_recipe --> __end__;
@@ -101,7 +104,14 @@ graph TD;
 - В описании часто только ингредиенты, а шаги — голосом. Если рецепта нет или в нём меньше 2 шагов,
   субтитров нет и речь ещё не распознавали — граф распознаёт речь и извлекает рецепт ещё раз
   (не больше одного раза; если со звуком рецепт не нашёлся, остаётся рецепт из описания).
-- Статусы задачи (`GetImportStatus`): `queued → reading → [transcribing] → extracting → saving → done`,
+- А бывает, что шаги только показаны: музыка, руки, подписи. Если шагов всё ещё нет — **watch**:
+  видео скачивается в 480p, ffmpeg собирает кадры (раз в 2 с, реже для длинных) в 1–4 листа 4×3,
+  vision-модель (`LLM_VISION_MODELS`) выписывает текст с экрана и описывает действия повара,
+  и рецепт извлекается ещё раз. Один раз; если модель не ответила — рецепт сохраняется как есть.
+  Описание кадров — догадка модели: на пробе она приняла зачерпывание теста за «добавляют масло».
+- Субтитры из одних пометок YouTube (`[Music]`, `foreign`) или короче 5 слов — не субтитры.
+- Статусы задачи (`GetImportStatus`): `queued → reading → [transcribing] → extracting →
+  [transcribing / watching → extracting] → saving → done`,
   либо `no_recipe` / `failed` с понятной ошибкой. Задачи хранятся в памяти процесса.
 - Одновременно идут `IMPORT_CONCURRENCY` (2) импорта, остальные ждут в `queued`.
 - Повторы: чтение видео и скачивание аудио — до 3 раз при сбое связи (не при «приватное»/«удалено»);
@@ -195,7 +205,9 @@ ffmpeg оставляет от видео только речь: mono, 16 кГц
 ## Языковые модели (LLM)
 
 Бесплатные модели OpenRouter (`:free`), у каждой задачи свой список запасных: `LLM_EXTRACT_MODELS`
-(извлечение рецепта: нужен JSON по схеме) и `LLM_CHAT_MODELS` (агент: нужен вызов инструментов).
+(извлечение рецепта: нужен JSON по схеме), `LLM_CHAT_MODELS` (агент: нужен вызов инструментов) и
+`LLM_VISION_MODELS` (кадры видео: нужны картинки на входе; дедлайн `LLM_VISION_TIMEOUT_SECONDS`, 150 с —
+nemotron-vl описывает 2 листа кадров ~90 с).
 Модели по умолчанию выбраны пробой на русском тексте рецепта — см. `bootstrap/settings.py`.
 
 - Переход к следующей модели: таймаут, 429 (общие лимиты бесплатных моделей срабатывают часто),

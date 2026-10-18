@@ -1,6 +1,6 @@
 import pytest
 
-from receipt.domain.source_text import SourceText, looks_like_ingredient_list
+from receipt.domain.source_text import SourceText, looks_like_ingredient_list, without_chapters
 
 INGREDIENTS = """Борщ на 4 порции:
 свёкла 2 шт
@@ -38,7 +38,9 @@ def test_ignores_texts_without_ingredient_lists(text: str) -> None:
 
 
 def test_subtitles_are_enough_without_transcription() -> None:
-    text = SourceText(title="Борщ", description="Подписывайтесь!", subtitles="Берём свёклу...")
+    text = SourceText(
+        title="Борщ", description="Подписывайтесь!", subtitles="Берём свёклу, капусту и варим..."
+    )
 
     assert text.has_subtitles
     assert not text.needs_transcription
@@ -59,3 +61,29 @@ def test_combined_text_has_labelled_non_empty_sections() -> None:
     text = SourceText(title="Борщ", description="", subtitles="Берём свёклу")
 
     assert text.combined() == "Название:\nБорщ\n\nСубтитры:\nБерём свёклу"
+
+
+@pytest.mark.parametrize("subtitles", ["", "foreign", "Музыка играет весь ролик"])
+def test_a_few_words_are_not_subtitles(subtitles: str) -> None:
+    text = SourceText(title="Блины", description="Рецепт в видео", subtitles=subtitles)
+
+    assert not text.has_subtitles
+    assert text.needs_transcription
+
+
+def test_frames_go_last_into_the_text() -> None:
+    text = SourceText(title="Блины", description="Мука 280 г", frames="Повар взбивает яйца")
+
+    assert text.combined().endswith(
+        "Что видно на кадрах видео (описано автоматически):\nПовар взбивает яйца"
+    )
+
+
+def test_chapters_are_not_given_as_steps() -> None:
+    description = (
+        "Pancakes!\n\n0:00 Preparing the pancakes\n▶ 0:17 Making them\n1:02:03 Итог\n2 eggs"
+    )
+    text = SourceText(title="", description=description)
+
+    assert text.combined() == "Описание:\nPancakes!\n\n2 eggs"
+    assert without_chapters("Жарим 3:00 минуты") == "Жарим 3:00 минуты"  # not at a line start

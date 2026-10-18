@@ -41,6 +41,10 @@ class VideoDownloader(Protocol):
         """Downloads only the audio track into ``target_dir`` and returns the file path."""
         ...
 
+    async def download_video(self, url: str, target_dir: Path) -> Path:
+        """Downloads a small copy of the picture (sound not needed) and returns the file path."""
+        ...
+
 
 class SubtitleFetcher(Protocol):
     async def fetch_subtitle_text(self, track: SubtitleTrack) -> str:

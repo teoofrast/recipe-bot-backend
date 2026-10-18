@@ -122,6 +122,13 @@ def test_document_round_trip() -> None:
     assert from_document(json.loads(json.dumps(to_document(saved)))) == saved
 
 
+def test_files_saved_before_frames_still_load() -> None:
+    document = to_document(saved_recipe())
+    del document["source_text"]["frames"]
+
+    assert from_document(document).source_text.frames == ""
+
+
 @pytest.mark.parametrize("recipe_id", ["../../etc/passwd", "a1/../b2", "A1", "", "a1.json"])
 async def test_ids_that_are_not_ids_never_become_paths(tmp_path: Path, recipe_id: str) -> None:
     repository = JsonFileRecipeRepository(tmp_path / "recipes")
