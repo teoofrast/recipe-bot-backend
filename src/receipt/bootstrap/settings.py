@@ -17,6 +17,8 @@ class Settings(BaseSettings):
 
     # Saved recipes and other local data; mounted into the container as /app/data.
     data_dir: Path = Path("data")
+    # Imports running at once; the rest wait in the "queued" status.
+    import_concurrency: int = 2
 
     # Netscape-format cookies for platforms that require login (usually Instagram).
     ytdlp_cookies_file: Path | None = None

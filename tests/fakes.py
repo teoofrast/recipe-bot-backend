@@ -2,7 +2,11 @@ from collections.abc import Sequence
 from datetime import datetime
 from pathlib import Path
 
-from receipt.application.errors import DuplicateRecipeError
+from receipt.application.errors import (
+    DuplicateRecipeError,
+    VideoUnavailableError,
+    VideoUnavailableReason,
+)
 from receipt.application.ports.recipe_index import RecipeFilters, RecipeHit
 from receipt.application.ports.transcriber import Transcript
 from receipt.application.ports.video_downloader import SubtitleTrack, VideoMetadata
@@ -28,6 +32,8 @@ class FakeVideoDownloader:
 
     def __init__(self, error: Exception | None = None) -> None:
         self.error = error
+        # Fail this many times with a transient "platform did not answer" before working.
+        self.transient_failures = 0
         self.description = "Свёкла 2 шт, капуста 300 г"
         self.subtitle_tracks: tuple[SubtitleTrack, ...] = ()
         self.subtitles: dict[str, str] = {}
@@ -37,6 +43,9 @@ class FakeVideoDownloader:
         platform = detect_platform(url)
         if self.error is not None:
             raise self.error
+        if self.transient_failures:
+            self.transient_failures -= 1
+            raise VideoUnavailableError(VideoUnavailableReason.UNKNOWN, "connection reset")
         return VideoMetadata(
             url=url,
             platform=platform,

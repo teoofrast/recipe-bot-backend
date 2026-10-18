@@ -13,12 +13,18 @@ from receipt.application.recipes.collection import (
     SaveRecipe,
 )
 from receipt.application.recipes.extract_recipe import ExtractRecipe
+from receipt.application.recipes.import_recipe import (
+    CreateImportJob,
+    GetImportStatus,
+    ImportRecipe,
+)
 from receipt.application.recipes.search import ReindexRecipes, SearchRecipes
 from receipt.application.system.ping import Ping, PingStream
 from receipt.application.video.get_video_info import GetVideoInfo
 from receipt.application.video.get_video_text import GetVideoText
 from receipt.application.video.get_video_transcript import GetVideoTranscript
 from receipt.domain.errors import DomainError
+from receipt.domain.import_job import ImportJob, ImportStatus
 from receipt.domain.recipe import Recipe
 
 
@@ -53,7 +59,35 @@ def build_parser() -> argparse.ArgumentParser:
     search.add_argument("--cuisine")
     search.add_argument("--limit", type=int, default=5)
     commands.add_parser("reindex", help="rebuild the search index from the saved recipes")
+    import_ = commands.add_parser("import", help="import a recipe from a video: extract and save")
+    import_.add_argument("url")
     return parser
+
+
+STATUS_TEXT = {
+    ImportStatus.QUEUED: "в очереди",
+    ImportStatus.READING: "читаю описание и субтитры",
+    ImportStatus.TRANSCRIBING: "распознаю речь",
+    ImportStatus.EXTRACTING: "извлекаю рецепт",
+    ImportStatus.SAVING: "сохраняю",
+    ImportStatus.DONE: "готово",
+    ImportStatus.NO_RECIPE: "в видео нет рецепта",
+    ImportStatus.FAILED: "ошибка",
+}
+
+
+async def import_with_progress(url: str, mediator: Mediator) -> ImportJob:
+    """Starts the import and watches its status, the way the API and the bot will."""
+    job = await mediator.send(CreateImportJob(url=url))
+    task = asyncio.create_task(mediator.send(ImportRecipe(url=url, job_id=job.id)))
+    shown = None
+    while not task.done():
+        status = (await mediator.send(GetImportStatus(job_id=job.id))).status
+        if status != shown:
+            print(f"… {STATUS_TEXT[status]}", flush=True)
+            shown = status
+        await asyncio.wait({task}, timeout=0.5)
+    return await task
 
 
 def format_recipe(recipe: Recipe) -> str:
@@ -170,6 +204,19 @@ async def run(args: argparse.Namespace, mediator: Mediator) -> None:
         case "reindex":
             count = await mediator.send(ReindexRecipes())
             print(f"Проиндексировано рецептов: {count}")
+        case "import":
+            job = await import_with_progress(args.url, mediator)
+            if job.status is ImportStatus.DONE:
+                assert job.recipe_id is not None
+                saved = await mediator.send(GetRecipe(recipe_id=job.recipe_id))
+                state = "Уже был сохранён раньше" if job.already_saved else "Сохранён"
+                print(f"\n{state}: {saved.id}\n")
+                print(format_recipe(saved.recipe))
+            elif job.status is ImportStatus.NO_RECIPE:
+                print("\nРецепта в видео нет.")
+            else:
+                print(f"\nОшибка: {job.error}", file=sys.stderr)
+                raise SystemExit(1)
 
 
 def main(argv: Sequence[str], mediator: Mediator) -> None:

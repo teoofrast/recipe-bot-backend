@@ -65,12 +65,39 @@ docker compose run --rm api receipt video-text "https://youtu.be/jNQXAC9IVRw"  #
 docker compose run --rm api receipt transcribe "https://youtu.be/jNQXAC9IVRw"  # речь из аудио через OpenRouter
 docker compose run --rm api receipt extract "https://www.youtube.com/watch?v=QPy2sA8HC5U"  # рецепт (без сохранения)
 docker compose run --rm api receipt extract "https://www.youtube.com/watch?v=QPy2sA8HC5U" --save
+docker compose run --rm api receipt import "https://www.youtube.com/watch?v=QPy2sA8HC5U"  # полный импорт со статусами
 docker compose run --rm api receipt list            # сохранённые рецепты
 docker compose run --rm api receipt show <id>
 docker compose run --rm api receipt delete <id>
 docker compose run --rm api receipt search "что приготовить из курицы" [--max-minutes 30] [--tag ужин]
 docker compose run --rm api receipt reindex         # пересобрать поиск из data/recipes
 ```
+
+## Импорт рецепта (граф LangGraph)
+
+`ImportRecipe(url)` проводит ссылку через граф (`infrastructure/imports/langgraph_pipeline.py`);
+схема — `uv run python scripts/import_graph.py`:
+
+```mermaid
+graph TD;
+	__start__([start]) --> read_video;
+	read_video --> check_saved;
+	check_saved -. уже сохранён .-> __end__([end]);
+	check_saved -. мало текста .-> transcribe;
+	check_saved -. текста хватает .-> extract;
+	transcribe --> extract;
+	extract -. рецепта нет .-> __end__;
+	extract --> save;
+	save --> __end__;
+```
+
+- **read_video** — название, описание, субтитры; **check_saved** — видео уже в коллекции? тогда сразу
+  конец, без LLM; **transcribe** — речь, если текста мало; **extract** — LLM; **save** — файл + индекс.
+- Статусы задачи (`GetImportStatus`): `queued → reading → [transcribing] → extracting → saving → done`,
+  либо `no_recipe` / `failed` с понятной ошибкой. Задачи хранятся в памяти процесса.
+- Одновременно идут `IMPORT_CONCURRENCY` (2) импорта, остальные ждут в `queued`.
+- Повторы: чтение видео и скачивание аудио — до 3 раз при сбое связи (не при «приватное»/«удалено»);
+  извлечение — ещё раз через 15 с, если все бесплатные модели упёрлись в лимиты.
 
 ## Хранение рецептов
 
