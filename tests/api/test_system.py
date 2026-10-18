@@ -84,6 +84,7 @@ def test_openapi_lists_the_key_and_the_chat_stream_events(client: AsyncClient) -
     assert "APIKeyHeader" in schema["components"]["securitySchemes"]
     for name in ("TokenData", "ToolData", "SourcesData", "DoneData", "ErrorData"):
         assert name in schema["components"]["schemas"]
+        assert "$defs" not in schema["components"]["schemas"][name]
     assert (
         "text/event-stream"
         in schema["paths"]["/chat/stream"]["post"]["responses"]["200"]["content"]
