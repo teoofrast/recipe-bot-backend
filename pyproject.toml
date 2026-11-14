@@ -9,16 +9,16 @@ requires-python = ">=3.12"
 dependencies = [
     "aiogram>=3.31.0",
     "chromadb-client==1.5.9",
-    "fastapi>=0.143.3",
+    "fastapi>=0.162.4",
     "httpx>=0.28.1",
-    "langchain>=1.4.6",
-    "langchain-openai>=1.7.2",
-    "langgraph>=1.2.16",
+    "langchain>=1.4.10",
+    "langchain-openai>=1.7.4",
+    "langgraph>=1.2.20",
     "punq>=0.9.0",
     "pydantic>=2.13.5",
-    "pydantic-settings>=2.16.0",
+    "pydantic-settings>=2.16.2",
     "python-dotenv>=1.2.4",
-    "sse-starlette>=3.5.0",
+    "sse-starlette>=3.7.0",
     "uvicorn[standard]>=0.54.0",
     "yt-dlp[curl-cffi,default,deno]>=2026.8.19",
 ]
@@ -32,12 +32,12 @@ build-backend = "uv_build"
 
 [dependency-groups]
 dev = [
-    "import-linter>=2.15",
+    "import-linter>=2.16",
     "pre-commit>=4.7.0",
-    "pytest>=9.1.1",
-    "pytest-asyncio>=1.4.0",
+    "pytest>=9.2.0",
+    "pytest-asyncio>=1.4.1.post1",
     "pytest-cov>=7.1.0",
-    "ruff>=0.17.1",
+    "ruff>=0.17.4",
 ]
 
 [tool.ruff]
